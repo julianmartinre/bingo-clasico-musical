@@ -6,6 +6,7 @@
   <meta name="theme-color" content="#173d35">
   <title>Bingo 90 · Cada número cuenta</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='32' fill='%23173d35'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-family='Arial' font-size='30' fill='%23fff'%3E90%3C/text%3E%3C/svg%3E">
+  <script src="js/appearance.js"></script>
   <link rel="stylesheet" href="styles.css">
   <script defer src="js/domain.js"></script>
   <script defer src="js/storage.js"></script>
@@ -16,6 +17,7 @@
     <header class="topbar">
       <a class="brand" href="#" aria-label="Bingo 90, inicio"><span class="brand-ball">90</span><span>BINGO<span class="brand-caption">CADA NÚMERO CUENTA</span></span></a>
       <nav aria-label="Secciones"><button class="nav-button active" data-view="game" aria-current="page">Sorteo</button><button class="nav-button" data-view="sets">Mis cartones <span id="set-count">0</span></button></nav>
+      <button class="button secondary appearance-open" data-appearance aria-haspopup="dialog">◐ Apariencia</button>
       <span class="local-label"><i></i> Guardado en este navegador</span>
     </header>
     <div id="lock-warning" class="warning" hidden>Otra pestaña está operando el bingo. Cerrala para tomar el control. <button id="take-control">Tomar control</button></div>
@@ -23,7 +25,7 @@
     <main>
       <section id="game-view">
         <div class="page-heading"><div><p class="eyebrow">QUE EMPIECE EL JUEGO</p><h1>Una bolilla, una emoción.</h1><p class="subtitle">Todo listo para compartir una buena partida.</p></div><button id="new-game" class="button secondary">＋ Nueva partida</button></div>
-        <div class="session-bar"><span class="session-dot"></span><label for="game-select">PARTIDA</label><select id="game-select" aria-label="Partida seleccionada"></select><span id="game-set-label"></span><button id="expand" class="text-button">⛶ Ampliar tablero</button></div>
+        <div class="session-bar"><span class="session-dot"></span><label for="game-select">PARTIDA</label><select id="game-select" aria-label="Partida seleccionada"></select><span id="game-set-label"></span><button class="text-button appearance-expanded" data-appearance aria-haspopup="dialog">◐ Apariencia</button><button id="expand" class="text-button">⛶ Ampliar tablero</button></div>
         <div class="game-layout">
           <section class="board-panel" aria-labelledby="board-title"><div class="panel-heading"><h2 id="board-title">El tablero</h2><span><b id="draw-count">0</b> de <span id="ball-total">90</span> bolillas</span></div><div id="board" class="number-board" aria-label="Tablero de números del 1 al 90"></div><div id="song-detail" role="tooltip" hidden></div><div class="board-legend"><span><i class="legend-hit"></i> Ya salió</span><span><i class="legend-last"></i> Última bolilla</span><span id="remaining">90 por salir</span></div></section>
           <aside class="draw-panel"><p class="eyebrow">ÚLTIMA BOLILLA</p><div class="ball-stage"><div class="big-ball"><span id="last-ball" aria-live="polite">—</span></div></div><p id="last-song" aria-live="polite" hidden></p><p id="draw-hint">Creá una partida para empezar</p><button id="draw" class="button primary">Sacar bolilla <span>→</span></button><div class="claim-block"><p>¿Alguien cantó?</p><button id="verify-open" class="button secondary">✓ Verificar cartón</button><small id="claim-help">Comprobá línea o bingo con su código.</small></div></aside>
@@ -38,6 +40,16 @@
     </main>
     <footer><span>BINGO 90 <span class="footer-dot">/</span> Hecho para jugar juntos.</span><span id="footer-mode">90 bolillas · Sin conexión · Sin apuro</span></footer>
   </div>
+  <dialog id="appearance-dialog" aria-labelledby="appearance-title">
+    <div class="dialog-heading"><h2 id="appearance-title">Apariencia</h2><button class="close" data-close="appearance-dialog" aria-label="Cerrar apariencia">×</button></div>
+    <p>Elegí cómo querés ver tu bingo. Los cambios se aplican al instante.</p>
+    <label for="appearance-mode">Modo</label><select id="appearance-mode"><option value="system">Según el sistema</option><option value="light">Claro</option><option value="dark">Oscuro</option></select>
+    <label for="appearance-palette">Paleta de colores</label><select id="appearance-palette"><option value="forest">Bosque · verde</option><option value="ocean">Océano · azul</option><option value="plum">Ciruela · violeta</option></select>
+    <div class="palette-samples" aria-hidden="true"><span class="swatch forest"></span><span class="swatch ocean"></span><span class="swatch plum"></span></div>
+    <p>Se guarda en este navegador. Los cartones siempre mantienen el papel claro para imprimir.</p>
+    <p id="appearance-status" role="status" hidden></p>
+    <button class="button secondary full" data-close="appearance-dialog">Listo</button>
+  </dialog>
   <dialog id="game-dialog" aria-labelledby="game-dialog-title"><form id="game-form"><div class="dialog-heading"><h2 id="game-dialog-title">Una nueva partida</h2><button type="button" class="close" data-close="game-dialog" aria-label="Cerrar">×</button></div><p>Usá un set impreso. El historial de las otras partidas se conserva.</p><label for="game-name">Nombre de la partida</label><input id="game-name" maxlength="60" required placeholder="Ej. Primera ronda"><label for="game-set">Set de cartones</label><select id="game-set" required></select><button class="button primary" type="submit">Empezar partida →</button></form></dialog>
   <dialog id="verify-dialog" aria-labelledby="verify-title"><div class="dialog-heading"><div><p class="eyebrow">SORTEO EN PAUSA</p><h2 id="verify-title">A ver ese cartón…</h2></div><button class="close" data-close="verify-dialog" aria-label="Cerrar verificador">×</button></div><p id="verify-context"></p><form id="verify-form"><label for="card-code">Código impreso en el cartón</label><div class="inline-form"><input id="card-code" inputmode="numeric" autocomplete="off" placeholder="Ej. 24" required><button class="button primary" type="submit">Verificar</button></div></form><div id="verify-result" aria-live="polite"></div><button class="button secondary full" data-close="verify-dialog">Volver al sorteo</button></dialog>
   <dialog id="preview-dialog" aria-labelledby="preview-title"><div class="dialog-heading"><div><p class="eyebrow">VISTA PREVIA</p><h2 id="preview-title">Cartones</h2></div><button class="close" data-close="preview-dialog" aria-label="Cerrar vista previa">×</button></div><p>A4 · Escala 100 % · Desactivá encabezados y pies del navegador.</p><button id="print" class="button primary">Imprimir / Guardar PDF</button><div id="preview-cards"></div><div class="pagination"><button id="preview-prev" class="button secondary">← Anterior</button><span id="preview-page"></span><button id="preview-next" class="button secondary">Siguiente →</button></div></dialog>

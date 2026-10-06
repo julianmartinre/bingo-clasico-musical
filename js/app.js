@@ -165,6 +165,22 @@
   document.querySelectorAll('[data-view]').forEach(button => button.onclick = () => showView(button.dataset.view));
   document.querySelector('.brand').onclick = event => { event.preventDefault(); showView('game'); };
   document.querySelectorAll('[data-close]').forEach(button => button.onclick = () => $(button.dataset.close).close());
+  let appearanceTrigger;
+  document.querySelectorAll('[data-appearance]').forEach(button => button.onclick = () => {
+    appearanceTrigger = button;
+    const preference = BingoAppearance.get();
+    $('appearance-mode').value = preference.mode;
+    $('appearance-palette').value = preference.palette;
+    $('appearance-dialog').showModal();
+  });
+  $('appearance-dialog').addEventListener('close', () => appearanceTrigger?.focus());
+  function changeAppearance() {
+    const saved = BingoAppearance.set({ mode: $('appearance-mode').value, palette: $('appearance-palette').value });
+    $('appearance-status').hidden = saved;
+    $('appearance-status').textContent = saved ? '' : 'No se pudo guardar la apariencia. Se aplicará durante esta sesión.';
+  }
+  $('appearance-mode').onchange = changeAppearance;
+  $('appearance-palette').onchange = changeAppearance;
   $('go-sets').onclick = () => { showView('sets'); $('set-name').focus(); };
   $('new-game').onclick = () => openGame(); $('take-control').onclick = acquireLock;
   function updateDraft() {

@@ -91,3 +91,11 @@ node --check js/app.js
 
 Las pruebas del dominio cubren 3000 cartones, reglas de bingo, 90 extracciones, límites, códigos y validación de respaldos. La evidencia de integración y de impresión está documentada en `tests/VERIFICATION.md`.
 
+
+## Apariencia
+
+Usá **◐ Apariencia** en la cabecera o en el tablero ampliado. Elegí **Claro**, **Oscuro** o **Según el sistema**, y combiná el modo con **Bosque** (verde), **Océano** (azul) o **Ciruela** (violeta). Se aplica al instante; cerrá con **Listo** o Escape.
+
+Al abrir por primera vez se usa Según el sistema y Bosque. Solo el modo automático sigue los cambios del sistema. La elección se guarda en este navegador y origen; no se incluye en respaldos ni cambia al restaurar o comenzar otra partida. Si el navegador impide guardarla, se aplica durante la sesión y se muestra un aviso. Otras pestañas recuperan la preferencia al abrirse de nuevo.
+
+Los cartones, incluso en el verificador y la vista previa, mantienen papel claro y texto oscuro. El modo oscuro no modifica números, canciones, códigos ni la distribución de impresión.
