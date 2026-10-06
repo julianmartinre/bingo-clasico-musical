@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="styles.css">
   <script defer src="js/domain.js"></script>
   <script defer src="js/storage.js"></script>
-  <script defer src="js/music-print.js"></script><script defer src="js/app.js"></script>
+  <script defer src="js/music-print.js"></script><script defer src="js/music-audio.js"></script><script defer src="js/app.js"></script>
 </head>
 <body>
   <div id="app-shell">
@@ -28,7 +28,12 @@
         <div class="session-bar"><span class="session-dot"></span><label for="game-select">PARTIDA</label><select id="game-select" aria-label="Partida seleccionada"></select><span id="game-set-label"></span><button class="text-button appearance-expanded" data-appearance aria-haspopup="dialog">◐ Apariencia</button><button id="expand" class="text-button">⛶ Ampliar tablero</button></div>
         <div class="game-layout">
           <section class="board-panel" aria-labelledby="board-title"><div class="panel-heading"><h2 id="board-title">El tablero</h2><span><b id="draw-count">0</b> de <span id="ball-total">90</span> bolillas</span></div><div id="board" class="number-board" aria-label="Tablero de números del 1 al 90"></div><div id="song-detail" role="tooltip" hidden></div><div class="board-legend"><span><i class="legend-hit"></i> Ya salió</span><span><i class="legend-last"></i> Última bolilla</span><span id="remaining">90 por salir</span></div></section>
-          <aside class="draw-panel"><p class="eyebrow">ÚLTIMA BOLILLA</p><div class="ball-stage"><div class="big-ball"><span id="last-ball" aria-live="polite">—</span></div></div><p id="last-song" aria-live="polite" hidden></p><p id="draw-hint">Creá una partida para empezar</p><button id="draw" class="button primary">Sacar bolilla <span>→</span></button><div class="claim-block"><p>¿Alguien cantó?</p><button id="verify-open" class="button secondary">✓ Verificar cartón</button><small id="claim-help">Comprobá línea o bingo con su código.</small></div></aside>
+          <aside class="draw-panel"><p class="eyebrow">ÚLTIMA BOLILLA</p><div class="ball-stage"><div class="big-ball"><span id="last-ball" aria-live="polite">—</span></div></div><p id="last-song" aria-live="polite" hidden></p><p id="draw-hint">Creá una partida para empezar</p><button id="draw" class="button primary">Sacar bolilla <span>→</span></button><section id="audio-panel" class="audio-panel" aria-label="Audio de la canción sorteada" hidden>
+            <button id="audio-open" class="text-button" aria-haspopup="dialog">♫ Audios del set</button>
+            <p id="audio-track"></p><p id="audio-status" role="status" aria-live="polite"></p>
+            <div class="audio-actions"><button id="audio-play" class="button secondary">Reproducir canción</button><button id="audio-restart" class="text-button">Volver al inicio</button></div>
+            <label for="audio-volume">Volumen <output id="audio-volume-value">50 %</output></label><input id="audio-volume" type="range" min="0" max="100" value="50"><p id="audio-volume-help" hidden>Usá el volumen de tu dispositivo.</p>
+          </section><div class="claim-block"><p>¿Alguien cantó?</p><button id="verify-open" class="button secondary">✓ Verificar cartón</button><small id="claim-help">Comprobá línea o bingo con su código.</small></div></aside>
         </div>
         <section class="history-panel"><div class="panel-heading"><h2>Así fueron saliendo</h2><span>En orden de extracción</span></div><div id="history" class="history"><p>Todavía no salió ninguna bolilla. La primera está por llegar.</p></div></section>
         <div id="game-empty" class="getting-started"><span class="step-number">01</span><div><h3>Primero, preparemos los cartones</h3><p>Generá un set, imprimilo y usalo en todas las rondas que quieras.</p></div><button id="go-sets" class="button secondary">Crear mis cartones →</button></div>
@@ -40,6 +45,16 @@
     </main>
     <footer><span>BINGO 90 <span class="footer-dot">/</span> Hecho para jugar juntos.</span><span id="footer-mode">90 bolillas · Sin conexión · Sin apuro</span></footer>
   </div>
+  <audio id="music-player" preload="none" hidden></audio>
+  <dialog id="audio-dialog" aria-labelledby="audio-title">
+    <div class="dialog-heading"><h2 id="audio-title">Audios del set</h2><button class="close" data-close="audio-dialog" aria-label="Cerrar audios">×</button></div>
+    <p id="audio-set-name"></p><p>Los archivos quedan en tu dispositivo. Al recargar tendrás que seleccionarlos nuevamente; no se incluyen en los respaldos.</p>
+    <label for="audio-files">Agregar archivos de audio</label><input id="audio-files" type="file" accept="audio/*" multiple>
+    <p>Relacionamos nombres únicos con los títulos, sin extensión. Podés corregir cada canción o elegir Sin audio. Las asociaciones se aplican al instante; los tiempos requieren Guardar fragmento. Cerrar descarta tiempos sin guardar.</p>
+    <p id="audio-preview-status" role="status" aria-live="polite"></p><button id="audio-preview-stop" class="button secondary" disabled>Detener prueba</button>
+    <p id="audio-summary" role="status"></p><div id="audio-links" class="audio-links"></div>
+    <button class="button secondary full" data-close="audio-dialog">Listo</button>
+  </dialog>
   <dialog id="appearance-dialog" aria-labelledby="appearance-title">
     <div class="dialog-heading"><h2 id="appearance-title">Apariencia</h2><button class="close" data-close="appearance-dialog" aria-label="Cerrar apariencia">×</button></div>
     <p>Elegí cómo querés ver tu bingo. Los cambios se aplican al instante.</p>

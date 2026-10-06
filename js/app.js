@@ -7,6 +7,139 @@
   const modeName = set => set?.mode === 'music' ? 'Musical' : 'Clásico';
   const game = () => state.games.find(g => g.id === state.selectedGame);
   const setFor = g => state.sets.find(s => s.id === g?.setId);
+  const audioLibrary = BingoMusicAudio.library();
+  const audioPlayer = BingoMusicAudio.player($('music-player'), renderAudio);
+  let audioSet, audioTrigger, previewNumber = null;
+  const clipDrafts = new Map(), audioMetadata = BingoMusicAudio.metadata();
+  const editingSet = () => state.sets.find(set => set.id === audioSet?.id);
+  const clipSummary = clip => `${Bingo.formatTime(clip.start)} → ${clip.end === null ? 'final de la canción' : Bingo.formatTime(clip.end)}`;
+  function cancelClipRequests() { clipDrafts.forEach(draft => { draft.controller?.abort(); draft.working = false; }); }
+  function stopPreview(number) {
+    if (number === undefined || previewNumber === number) { audioPlayer.stop(); previewNumber = null; $('audio-preview-status').textContent = ''; }
+  }
+  function updateClipRow(number) {
+    const set = editingSet(), draft = clipDrafts.get(number), row = $(`clip-row-${number}`);
+    if (!set || !draft || !row) return;
+    const file = audioLibrary.file(set, number), duration = audioMetadata.peek(file);
+    $(`clip-saved-${number}`).textContent = `Guardado: ${clipSummary(set.clips[number - 1])}${duration ? ` · Duración: ${duration.toFixed(1)} s` : ' · Pendiente de comprobar contra el archivo'}`;
+    $(`clip-error-${number}`).textContent = draft.error || (draft.working ? 'Comprobando audio…' : '');
+    row.querySelectorAll('button').forEach(button => button.disabled = !writable || busy || draft.working || (button.dataset.clipAction === 'test' && !file));
+  }
+  async function clipAction(number, action) {
+    const set = editingSet(), draft = clipDrafts.get(number);
+    if (!set || !draft || !writable || busy || draft.working) return;
+    if (action === 'test') {
+      cancelClipRequests(); stopPreview(); previewNumber = number;
+      $('audio-preview-status').textContent = `Preparando prueba ${number}…`;
+      $('audio-preview-stop').disabled = false;
+    }
+    else if (previewNumber === number) stopPreview(number);
+    draft.controller?.abort(); const controller = new AbortController(); draft.controller = controller;
+    const file = audioLibrary.file(set, number);
+    draft.error = ''; draft.working = true; updateClipRow(number);
+    try {
+      const clip = action === 'reset' ? { start: 0, end: null } : Bingo.validateClip({ start: Bingo.parseTime(draft.start), end: Bingo.parseTime(draft.end, null) });
+      if (file) Bingo.validateClip(clip, await audioMetadata.read(file, controller.signal));
+      if (controller.signal.aborted || editingSet()?.id !== set.id || !writable) return;
+      if (action === 'test') {
+        if (!file) throw new Error('Asociá un archivo para probar el fragmento.');
+        audioPlayer.select(file, `preview:${set.id}:${number}`, `${number} · ${set.songs[number - 1]}`, clip);
+        await audioPlayer.play();
+      } else {
+        const ok = await mutate(current => {
+          const target = current.sets.find(item => item.id === set.id);
+          if (!target || target.mode !== 'music') throw new Error('El set ya no está disponible.');
+          target.clips[number - 1] = clip; return current;
+        });
+        if (!ok) throw new Error('No se pudo guardar el fragmento. El valor anterior se conserva; podés reintentar.');
+        if (controller.signal.aborted || editingSet()?.id !== set.id) return;
+        draft.start = Bingo.formatTime(clip.start); draft.end = Bingo.formatTime(clip.end);
+        $(`clip-start-${number}`).value = draft.start; $(`clip-end-${number}`).value = draft.end;
+      }
+    } catch (error) { if (!controller.signal.aborted) draft.error = error.message; }
+    finally { if (draft.controller === controller) draft.working = false; updateClipRow(number); }
+  }
+
+  function renderAudio(value = audioPlayer.read()) {
+    const current = game(), set = setFor(current), musical = set?.mode === 'music';
+    if (audioSet) {
+      $('audio-preview-status').textContent = previewNumber ? `Prueba ${value.label || previewNumber}: ${value.message}` : '';
+      $('audio-preview-stop').disabled = previewNumber === null;
+    }
+    $('audio-panel').hidden = !musical;
+    $('audio-track').textContent = value.label;
+    $('audio-status').textContent = writable ? value.message : 'Audio disponible en la pestaña que tiene el control.';
+    $('audio-status').dataset.status = value.status;
+    $('audio-play').textContent = ['playing', 'loading'].includes(value.status) ? 'Pausar canción' : 'Reproducir canción';
+    const disabled = !writable || busy || Boolean(snapshot) || !value.hasFile;
+    $('audio-play').disabled = disabled; $('audio-restart').disabled = disabled;
+    $('audio-volume').disabled = !value.volumeSupported || !writable;
+    $('audio-volume-help').hidden = value.volumeSupported;
+    $('audio-volume').value = Math.round(value.volume * 100);
+    $('audio-volume-value').textContent = `${Math.round(value.volume * 100)} %`;
+    $('audio-open').disabled = !writable || busy;
+  }
+  function syncAudio() {
+    if (audioSet) {
+      if (!writable) { cancelClipRequests(); stopPreview(); audioPlayer.stop(); }
+      clipDrafts.forEach((_, number) => updateClipRow(number)); renderAudio(); return;
+    }
+    const current = game(), set = setFor(current), number = current?.drawn.at(-1);
+    if (!writable || set?.mode !== 'music' || !number) {
+      if (audioPlayer.read().key) audioPlayer.stop();
+    } else audioPlayer.select(audioLibrary.file(set, number), `${current.id}:${number}`, `${number} · ${set.songs[number - 1]}`, set.clips[number - 1]);
+    renderAudio();
+  }
+  function renderAudioLinks() {
+    if (!editingSet()) return;
+    audioSet = editingSet();
+    const files = audioLibrary.files(audioSet);
+    const count = audioSet.songs.filter((_, i) => audioLibrary.file(audioSet, i + 1)).length;
+    $('audio-summary').textContent = `${count} con audio · ${audioSet.songs.length - count} sin audio · ${files.length} archivos locales`;
+    $('audio-links').replaceChildren();
+    audioSet.songs.forEach((title, index) => {
+      const number = index + 1, row = element('div', 'audio-link'), label = element('label', '', `${number} · ${title}`), select = element('select');
+      select.id = `audio-link-${number}`; label.htmlFor = select.id;
+      select.append(new Option('Sin audio', ''));
+      files.forEach((file, i) => {
+        const ambiguous = files.filter(candidate => candidate.name === file.name).length > 1;
+        const detail = ambiguous ? ` · ${Math.ceil(file.size / 1024)} KB · ${new Date(file.lastModified).toLocaleString()}` : '';
+        select.append(new Option(file.name + detail, String(i)));
+      });
+      const assigned = files.indexOf(audioLibrary.file(audioSet, number)); select.value = assigned < 0 ? '' : String(assigned);
+      select.onchange = () => {
+        if (!writable || busy) return;
+        const draft = clipDrafts.get(number); draft?.controller?.abort(); if (draft) { draft.working = false; draft.error = ''; }
+        stopPreview(number);
+        audioLibrary.assign(audioSet, number, select.value === '' ? -1 : Number(select.value));
+        syncAudio();
+        const count = audioSet.songs.filter((_, i) => audioLibrary.file(audioSet, i + 1)).length;
+        $('audio-summary').textContent = `${count} con audio · ${audioSet.songs.length - count} sin audio · ${files.length} archivos locales`;
+      };
+      const saved = audioSet.clips[index];
+      if (!clipDrafts.has(number)) clipDrafts.set(number, { start: Bingo.formatTime(saved.start), end: Bingo.formatTime(saved.end), error: '', working: false });
+      const draft = clipDrafts.get(number), editor = element('div', 'clip-editor'); editor.id = `clip-row-${number}`;
+      ['start', 'end'].forEach(part => {
+        const group = element('div'), input = element('input'), caption = element('label', '', part === 'start' ? 'Inicio (min:seg)' : 'Fin opcional (min:seg)');
+        input.id = `clip-${part}-${number}`; caption.htmlFor = input.id; input.value = draft[part]; input.placeholder = part === 'start' ? '00:00' : 'Hasta el final'; input.autocomplete = 'off'; input.setAttribute('aria-describedby', `clip-error-${number}`);
+        input.oninput = () => { draft.controller?.abort(); draft.working = false; draft[part] = input.value; draft.error = ''; stopPreview(number); updateClipRow(number); };
+        group.append(caption, input); editor.append(group);
+      });
+      const summary = element('p', 'clip-summary'); summary.id = `clip-saved-${number}`;
+      const error = element('p', 'clip-error'); error.id = `clip-error-${number}`; error.setAttribute('role', 'status');
+      const actions = element('div', 'clip-actions');
+      [['save', 'Guardar fragmento'], ['reset', 'Restablecer canción completa'], ['test', 'Probar fragmento']].forEach(([action, text]) => {
+        const button = element('button', 'button secondary', text); button.type = 'button'; button.dataset.clipAction = action; button.onclick = () => clipAction(number, action); actions.append(button);
+      });
+      editor.append(summary, error, actions); row.append(label, select, editor); $('audio-links').append(row); updateClipRow(number);
+    });
+  }
+  function openAudio(set, trigger) {
+    if (!writable || busy || set?.mode !== 'music') return;
+    audioPlayer.pause(); clipDrafts.clear(); previewNumber = null;
+    audioSet = set; audioTrigger = trigger; $('audio-files').value = '';
+    $('audio-set-name').textContent = set.name; renderAudioLinks(); $('audio-dialog').showModal();
+  }
   function notice(message, error = false) {
     clearTimeout(noticeTimer); $('notice').textContent = message; $('notice').classList.toggle('error', error); $('notice').hidden = false;
     noticeTimer = setTimeout(() => $('notice').hidden = true, error ? 10000 : 5000);
@@ -29,6 +162,7 @@
     $('export').disabled = busy;
     $('lock-warning').hidden = writable;
     $('generate').textContent = busy ? 'Procesando…' : 'Generar cartones ＋';
+    syncAudio();
     $('draw').textContent = game()?.drawn.length === Bingo.totalFor(setFor(game())) ? 'Bolillero agotado' : 'Sacar bolilla →';
   }
   async function mutate(change, success) {
@@ -84,7 +218,9 @@
       info.append(element('h3', '', set.name), element('p', '', `${modeName(set)} · ${set.cards.length} cartones · Códigos ${set.cards[0].code}–${set.cards.at(-1).code}${set.mode === 'music' ? ` · ${set.songs.length} canciones, ${set.cardSize} por cartón` : ''}`));
       const preview = element('button', 'button secondary', 'Ver / Imprimir'); preview.onclick = () => openPreview(set.id);
       const play = element('button', 'text-button', 'Jugar →'); play.disabled = !writable; play.onclick = () => openGame(set.id);
-      row.append(element('span', 'set-icon', '▦'), info, preview, play); $('sets-list').append(row);
+      row.append(element('span', 'set-icon', '▦'), info, preview, play);
+      if (set.mode === 'music') { const audio = element('button', 'text-button', '♫ Audios'); audio.disabled = !writable; audio.onclick = () => openAudio(set, audio); row.append(audio); }
+      $('sets-list').append(row);
     });
     controls();
   }
@@ -181,6 +317,22 @@
   }
   $('appearance-mode').onchange = changeAppearance;
   $('appearance-palette').onchange = changeAppearance;
+  $('audio-open').onclick = () => openAudio(setFor(game()), $('audio-open'));
+  $('audio-dialog').addEventListener('close', () => {
+    cancelClipRequests(); stopPreview(); audioSet = null; clipDrafts.clear(); $('audio-links').replaceChildren(); $('audio-files').value = ''; syncAudio(); audioTrigger?.focus();
+  });
+  $('audio-preview-stop').onclick = () => { cancelClipRequests(); stopPreview(); clipDrafts.forEach((_, n) => updateClipRow(n)); };
+  $('audio-files').onchange = () => {
+    if (!audioSet || !writable || !$('audio-files').files.length) return;
+    cancelClipRequests(); stopPreview();
+    audioLibrary.add(audioSet, $('audio-files').files); $('audio-files').value = ''; renderAudioLinks(); syncAudio();
+  };
+  $('audio-play').onclick = () => {
+    if (!writable || busy || snapshot) return;
+    if (['playing', 'loading'].includes(audioPlayer.read().status)) audioPlayer.pause(); else audioPlayer.play();
+  };
+  $('audio-restart').onclick = () => { if (writable && !busy && !snapshot) { audioPlayer.restart(); audioPlayer.play(); } };
+  $('audio-volume').oninput = () => { if (writable) audioPlayer.volume(Number($('audio-volume').value) / 100); };
   $('go-sets').onclick = () => { showView('sets'); $('set-name').focus(); };
   $('new-game').onclick = () => openGame(); $('take-control').onclick = acquireLock;
   function updateDraft() {
@@ -232,7 +384,7 @@
       state = await BingoStorage.update(current => {
         if (current.nextCode + count >= Number.MAX_SAFE_INTEGER) throw new Error('Se alcanzó el límite de códigos.');
         const set = { id: crypto.randomUUID(), name, mode, createdAt: new Date().toISOString(), cards: generated.map(values => ({ code: current.nextCode++, ...(mode === 'music' ? { numbers: values } : { matrix: values }) })) };
-        if (mode === 'music') { set.songs = songs; set.cardSize = Bingo.musicSize(songs.length); }
+        if (mode === 'music') { set.songs = songs; set.clips = songs.map(() => ({ start: 0, end: null })); set.cardSize = Bingo.musicSize(songs.length); }
         current.sets.push(set); return current;
       });
       render(); notice(`${count} cartones guardados. Recordá descargar un respaldo antes de imprimir.`); $('set-name').value = '';
@@ -252,10 +404,12 @@
   $('draw').onclick = async () => {
     if (snapshot || !game()) return;
     const id = game().id;
-    await mutate(current => { const selected = current.games.find(g => g.id === id), set = current.sets.find(s => s.id === selected.setId); selected.drawn.push(Bingo.draw(selected.drawn, undefined, Bingo.totalFor(set))); return current; });
+    const ok = await mutate(current => { const selected = current.games.find(g => g.id === id), set = current.sets.find(s => s.id === selected.setId); selected.drawn.push(Bingo.draw(selected.drawn, undefined, Bingo.totalFor(set))); return current; });
+    if (ok && writable && !snapshot && game()?.id === id && setFor(game())?.mode === 'music') audioPlayer.play();
   };
   $('verify-open').onclick = () => {
     if (!writable || !game() || busy) return;
+    audioPlayer.pause();
     snapshot = structuredClone(game()); controls(); $('card-code').value = ''; $('verify-result').replaceChildren();
     $('verify-context').textContent = `${snapshot.name} · ${snapshot.drawn.length} bolillas extraídas. No se sacarán números durante la verificación.`;
     $('verify-dialog').showModal(); $('card-code').focus();
@@ -300,9 +454,10 @@
       $('import-summary').textContent = `${pendingImport.sets.length} sets · ${pendingImport.games.length} partidas`; $('confirm-dialog').showModal();
     } catch (error) { pendingImport = null; notice(`No se pudo restaurar: ${error.message}`, true); }
   };
-  $('confirm-import').onclick = async () => { if (!pendingImport) return; const imported = pendingImport; if (await mutate(() => imported, 'Respaldo restaurado.')) $('confirm-dialog').close(); };
+  $('confirm-import').onclick = async () => { if (!pendingImport) return; const imported = pendingImport; if (await mutate(() => imported, 'Respaldo restaurado.')) { audioPlayer.stop(); audioLibrary.clear(); syncAudio(); $('confirm-dialog').close(); } };
   $('confirm-dialog').addEventListener('close', () => { pendingImport = null; });
-  window.addEventListener('pagehide', () => releaseLock?.());
+  window.addEventListener('pagehide', () => { cancelClipRequests(); audioPlayer.stop(); releaseLock?.(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) { cancelClipRequests(); audioPlayer.pause(); } });
   window.addEventListener('pageshow', event => { if (event.persisted) acquireLock(); });
   async function start() {
     render();

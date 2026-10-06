@@ -261,3 +261,29 @@ select option{background:var(--white);color:var(--ink)}
 @media(max-width:1100px){.local-label{display:none}}
 @media(max-width:650px){.topbar{height:auto;min-height:112px;flex-wrap:wrap;padding-top:14px;padding-bottom:12px}.topbar nav{order:3;width:100%;justify-content:center}.appearance-open{font-size:12px;padding:10px}.session-bar{flex-wrap:wrap}.session-bar select{flex:1}.expanded .appearance-expanded{margin-left:0}.expanded #expand{margin-left:auto}}
 @media print{html{color-scheme:light}}
+
+/* Audio local: controles de pantalla independientes de los cartones. */
+.audio-panel{width:100%;min-width:0;border-top:1px solid var(--line);padding-top:12px;margin-top:15px;text-align:left}
+.audio-panel p{font-size:12px;line-height:1.5;overflow-wrap:anywhere;margin:8px 0}
+#audio-track{font-weight:600}
+#audio-status{color:var(--muted)}
+.audio-actions{display:flex;flex-wrap:wrap;gap:6px}
+.audio-panel .button{font-size:12px;padding:10px}
+.audio-panel label{display:flex;justify-content:space-between}
+.audio-panel input[type=range]{padding:0;accent-color:var(--green);min-height:32px}
+#audio-dialog{width:720px;max-height:90vh}
+#audio-files{max-width:100%;font-size:12px}
+.audio-links{max-height:45vh;overflow:auto;padding:4px}
+.audio-link{padding:10px 0;border-top:1px solid var(--line);min-width:0}
+.audio-link label{overflow-wrap:anywhere;line-height:1.5;margin:4px 0 8px}
+.audio-link select{max-width:100%;font-size:12px}
+@media(max-width:650px){.audio-panel{grid-column:1/-1}.audio-actions .button{width:auto}.audio-link select{font-size:14px}.set-row{gap:10px}}
+@media print{#audio-panel,#audio-dialog,#music-player{display:none!important}}
+
+.clip-editor{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:14px}
+.clip-editor>div{min-width:0}.clip-editor input{width:100%}
+.clip-editor .clip-summary,.clip-editor .clip-error,.clip-editor .clip-actions{grid-column:1/-1;margin:0;font-size:12px;line-height:1.5}
+.clip-summary{color:var(--muted)}.clip-error{color:var(--warning-text)}
+.clip-actions{display:flex;flex-wrap:wrap;gap:8px}.clip-actions .button{font-size:11px;padding:9px}
+#audio-preview-status{overflow-wrap:anywhere}
+@media(max-width:650px){.clip-editor{grid-template-columns:1fr}.clip-actions .button{width:100%}}

@@ -153,14 +153,39 @@ function BingoFactory() {
     const hits = new Set(drawn), missing = numbers.filter(n => !hits.has(n));
     return { bingo: missing.length === 0, missing };
   }
-  const emptyState = () => ({ version: 2, nextCode: 1, selectedGame: null, sets: [], games: [] });
+  function validateClip(clip, duration) {
+    assert(clip && Number.isSafeInteger(clip.start) && clip.start >= 0, 'Inicio inválido.');
+    assert(clip.end === null || (Number.isSafeInteger(clip.end) && clip.end > clip.start), 'El fin debe ser posterior al inicio.');
+    if (duration !== undefined) {
+      assert(Number.isFinite(duration) && duration > 0, 'No se pudo determinar la duración del audio.');
+      assert(clip.start < duration && (clip.end === null || clip.end <= duration), 'El fragmento no cabe en este archivo. Revisá inicio y fin.');
+    }
+    return { start: clip.start, end: clip.end };
+  }
+  function parseTime(text, empty = 0) {
+    const value = String(text).trim();
+    if (!value) return empty;
+    assert(/^\d+:[0-5]\d$/.test(value), 'Usá minutos:segundos, por ejemplo 00:45.');
+    const [minutes, seconds] = value.split(':').map(Number), total = minutes * 60 + seconds;
+    assert(Number.isSafeInteger(total) && total >= 0, 'El tiempo es demasiado grande.');
+    return total;
+  }
+  const formatTime = seconds => seconds === null ? '' : `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
+  const emptyState = () => ({ version: 3, nextCode: 1, selectedGame: null, sets: [], games: [] });
   function validateState(input) {
-    assert(input && [1, 2].includes(input.version), 'Versión de respaldo no compatible.');
+    assert(input && [1, 2, 3].includes(input.version), 'Versión de respaldo no compatible.');
     assert(Array.isArray(input.sets) && Array.isArray(input.games), 'Respaldo incompleto.');
     const state = structuredClone(input), ids = new Set(), codes = new Set(), gameIds = new Set();
     if (state.version === 1) {
       state.sets.forEach(set => { assert(set && !set.songs && !set.cardSize && (!set.mode || set.mode === 'classic'), 'Un respaldo versión 1 solo admite sets clásicos.'); set.mode = 'classic'; });
       state.version = 2;
+    }
+    if (state.version === 2) {
+      state.sets.forEach(set => {
+        assert(set && set.clips === undefined, 'Un respaldo anterior no admite fragmentos.');
+        if (set.mode === 'music' && Array.isArray(set.songs)) set.clips = set.songs.map(() => ({ start: 0, end: null }));
+      });
+      state.version = 3;
     }
     const text = value => typeof value === 'string' && value.length > 0 && value.length <= 100;
     let maxCode = 0;
@@ -171,7 +196,9 @@ function BingoFactory() {
       if (set.mode === 'music') {
         assert(Array.isArray(set.songs) && set.songs.length > 0 && set.songs.every(song => typeof song === 'string' && song.length > 0 && song === song.trim() && !/[\r\n]/.test(song)), 'Listado de canciones inválido.');
         assert(set.cardSize === musicSize(set.songs.length), 'Tamaño de cartón musical inválido.');
-      } else assert(set.songs === undefined && set.cardSize === undefined, 'Un set clásico no debe contener un listado musical.');
+        assert(Array.isArray(set.clips) && set.clips.length === set.songs.length, 'Fragmentos musicales incompletos.');
+        for (let i = 0; i < set.clips.length; i++) validateClip(set.clips[i]);
+      } else assert(set.songs === undefined && set.cardSize === undefined && set.clips === undefined, 'Un set clásico no debe contener un listado musical.');
       assert(Array.isArray(set.cards) && set.cards.length >= 1 && set.cards.length <= 1000, 'Cantidad de cartones inválida.');
       const prints = new Set();
       set.cards.forEach(card => {
@@ -208,7 +235,7 @@ function BingoFactory() {
     }
     throw new Error('No se encontró un cartón con ese código.');
   }
-  return { randomIndex, generateCard, generateCards, validateCard, fingerprint, draw, verify, emptyState, validateState, findCard, parseSongs, musicSize, musicLimit, combinations, randomBigInt, generateMusicCards, totalFor, verifyMusic };
+  return { validateClip, parseTime, formatTime, randomIndex, generateCard, generateCards, validateCard, fingerprint, draw, verify, emptyState, validateState, findCard, parseSongs, musicSize, musicLimit, combinations, randomBigInt, generateMusicCards, totalFor, verifyMusic };
 }
 const Bingo = BingoFactory();
 if (typeof module !== 'undefined') module.exports = Bingo;

@@ -73,9 +73,9 @@ La impresión musical usa A4 con distribución adaptada a los nombres completos.
 
 ### Datos anteriores y respaldos
 
-La aplicación acepta respaldos clásicos versión 1 y los adapta en memoria a versión 2; conserva cartones, códigos, bolillas e historial. El cambio se guarda con la siguiente operación autorizada. Los respaldos nuevos son versión 2 y pueden contener ambos modos. Restaurarlos reemplaza los datos solo después de confirmar; archivos inválidos o cancelar no cambian nada.
+La aplicación acepta respaldos versión 1 y 2 y los adapta en memoria a versión 3; conserva cartones, códigos, bolillas e historial y agrega canción completa como fragmento inicial. El cambio se guarda con la siguiente operación autorizada. Los respaldos nuevos son versión 3 y pueden contener ambos modos y los tiempos de las canciones. Restaurarlos reemplaza los datos solo después de confirmar; archivos inválidos o cancelar no cambian nada.
 
-Si necesitás volver al código anterior, conservá previamente un respaldo clásico versión 1. La versión anterior del programa no puede leer respaldos versión 2. Cambiar entre archivo local y HTTP también requiere exportar/restaurar porque son orígenes distintos.
+Antes de actualizar, conservá un respaldo de la versión anterior si necesitás volver a ese código. Las versiones anteriores del programa no pueden leer respaldos versión 3. Cambiar entre archivo local y HTTP también requiere exportar/restaurar porque son orígenes distintos.
 
 ## Pruebas
 
@@ -99,3 +99,29 @@ Usá **◐ Apariencia** en la cabecera o en el tablero ampliado. Elegí **Claro*
 Al abrir por primera vez se usa Según el sistema y Bosque. Solo el modo automático sigue los cambios del sistema. La elección se guarda en este navegador y origen; no se incluye en respaldos ni cambia al restaurar o comenzar otra partida. Si el navegador impide guardarla, se aplica durante la sesión y se muestra un aviso. Otras pestañas recuperan la preferencia al abrirse de nuevo.
 
 Los cartones, incluso en el verificador y la vista previa, mantienen papel claro y texto oscuro. El modo oscuro no modifica números, canciones, códigos ni la distribución de impresión.
+
+## Audios locales del bingo musical
+
+1. Creá un set musical desde tu TXT. En el set elegí **♫ Audios**, o abrí **♫ Audios del set** en la partida.
+2. Seleccioná varios archivos de tu dispositivo. La aplicación relaciona nombres únicos (por ejemplo, `Don.mp3` con `Don`), ignorando extensión, mayúsculas, acentos y espacios redundantes. No quita prefijos numéricos ni nombres de artistas.
+3. Revisá el contador y los selectores por canción: los títulos repetidos o archivos ambiguos se asignan manualmente. Podés reutilizar un archivo en varios números, cambiarlo o elegir **Sin audio**. Agregar archivos conserva las asociaciones y cancelar no cambia nada.
+4. Al **Sacar bolilla**, después de guardar el resultado se reproduce su canción desde el inicio del fragmento guardado y se detiene la anterior. Si falta el audio, el juego sigue normalmente. El historial no reproduce canciones ni extrae números.
+5. Usá **Reproducir/Pausar canción**, **Volver al inicio** o **Volumen**, también en el tablero ampliado. El volumen inicial es 50 %. Si tu navegador no permite ajustarlo, usá el volumen del dispositivo. Terminar una canción no saca la siguiente bolilla.
+
+Los archivos permanecen en tu dispositivo: funciona desde GitHub Pages, archivo local o el servidor estático, sin subir los audios. Archivos y asociaciones duran solo mientras esa página está abierta. Tras recargar o restaurar un respaldo exitosamente, seleccioná los archivos nuevamente. No se guardan audios ni asociaciones en IndexedDB ni en los respaldos versión 3. Cancelar o rechazar una importación conserva las asociaciones.
+
+Al verificar un reclamo la canción se pausa y no se reanuda automáticamente al cerrar. Cambiar de partida o perder el control de la pestaña detiene la reproducción. Cambiar la apariencia o ampliar el tablero no reinicia el audio. Solo reproduce la pestaña operadora.
+
+Usá preferentemente MP3; los formatos y códecs disponibles dependen del navegador. Un archivo incompatible o dañado muestra un aviso sin cambiar la bolilla. Si el navegador bloquea la reproducción automática, tocá **Reproducir canción**: no hace falta volver a sortear. Cambiar el archivo de la canción actual también requiere este clic para comenzar.
+
+## Fragmentos por canción
+
+En **Audios del set**, cada número tiene **Inicio**, **Fin opcional**, **Probar fragmento**, **Guardar fragmento** y **Restablecer canción completa**. Por ejemplo, Inicio `00:45` y Fin `01:15` reproduce treinta segundos. Usá minutos:segundos, sin fracciones; los segundos van de 00 a 59. Inicio vacío significa `00:00`; Fin vacío significa hasta terminar el archivo.
+
+**Probar fragmento** escucha el borrador sin guardarlo ni sortear. **Detener prueba** o cerrar el diálogo detienen la preescucha. Abrir la configuración pausa el sorteo y cerrar no lo reanuda automáticamente. Solo puede sonar una pista. Editar límites o cambiar el archivo de la prueba la detiene.
+
+**Guardar fragmento** guarda únicamente esa fila. **Restablecer canción completa** guarda inicio cero y fin natural. Cerrar descarta tiempos no guardados. Podés guardar sin archivo, pero los límites quedan pendientes de comprobar. Con un archivo asociado se consulta su duración: inicio debe ser menor a la duración, y fin debe ser mayor al inicio sin superar el archivo. Si luego asociás una versión más corta, se informa del error sin ajustar los tiempos silenciosamente ni alterar el sorteo.
+
+Los tiempos se guardan con el set y en respaldos versión 3; persisten al recargar y se aplican en todas las rondas de ese set. Los archivos y sus asociaciones continúan siendo temporales y deben seleccionarse de nuevo. Títulos repetidos tienen fragmentos independientes por número.
+
+Al sortear se usa el fragmento guardado. **Volver al inicio** y reproducir después de terminar vuelven al inicio configurado, no al segundo cero. Pausar/reanudar conserva la posición dentro del tramo. Al ocultar la pestaña se pausa el audio y no se reanuda solo al volver. El corte usa el reloj del navegador y no es una edición de audio profesional; ninguna operación modifica el archivo original.

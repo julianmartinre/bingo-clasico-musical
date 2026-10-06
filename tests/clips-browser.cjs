@@ -1,0 +1,59 @@
+const {chromium}=require(process.env.BINGO_PLAYWRIGHT||'playwright');
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path'),http=require('node:http');
+const B=require('../js/domain.js');
+const out=path.join(__dirname,'artifacts/clips');fs.mkdirSync(out,{recursive:true});
+function wav(seconds=6){const rate=8000,n=rate*seconds,b=Buffer.alloc(44+2*n);b.write('RIFF');b.writeUInt32LE(b.length-8,4);b.write('WAVEfmt ',8);b.writeUInt32LE(16,16);b.writeUInt16LE(1,20);b.writeUInt16LE(1,22);b.writeUInt32LE(rate,24);b.writeUInt32LE(rate*2,28);b.writeUInt16LE(2,32);b.writeUInt16LE(16,34);b.write('data',36);b.writeUInt32LE(n*2,40);for(let i=0;i<n;i++){const t=i/rate,mid=t>=2&&t<4,freq=mid?880:220,gate=mid?(t%0.4<0.2?1:0):1;b.writeInt16LE(Math.round(4000*gate*Math.sin(2*Math.PI*freq*t)),44+2*i);}return b;}
+const sound=wav();fs.writeFileSync(path.join(out,'segmentos.wav'),sound);
+const ready=p=>p.waitForFunction(()=>!document.getElementById('generate').disabled);
+const state=p=>p.evaluate(()=>BingoStorage.read());
+const close=async p=>{await p.locator('[data-close="audio-dialog"]').last().click();await p.waitForFunction(()=>!document.getElementById('audio-dialog').open&&document.getElementById('music-player').paused);};
+const row=(p,n)=>p.locator(`#clip-row-${n}`);
+async function fill(p,n,start,end){await p.locator(`#clip-start-${n}`).fill(start);await p.locator(`#clip-end-${n}`).fill(end);}
+async function action(p,n,a){await row(p,n).locator(`[data-clip-action="${a}"]`).click();}
+const playing=p=>p.waitForFunction(()=>document.getElementById('music-player').currentTime>=2&&!document.getElementById('music-player').paused);
+async function seed(p){await p.evaluate(async()=>{const s={version:2,nextCode:2,selectedGame:null,sets:[{id:'s',mode:'music',name:'Fragmentos de prueba',createdAt:'2026-10-06',songs:['Don','Don'],cardSize:1,cards:[{code:1,numbers:[1]}]}],games:[]};await BingoStorage.update(()=>s);});await p.reload();await ready(p);await p.locator('[data-view="sets"]').click();await p.getByRole('button',{name:'♫ Audios',exact:true}).click();}
+async function upload(p){await p.locator('#audio-files').setInputFiles({name:'Don.wav',mimeType:'audio/wav',buffer:sound});await p.locator('#audio-link-1').selectOption('0');await p.locator('#audio-link-2').selectOption('0');}
+let browser,server;
+(async()=>{
+ browser=await chromium.launch({channel:'chrome',headless:true});const p=await browser.newPage({viewport:{width:1440,height:1100}}),errors=[],requests=[];
+ p.on('pageerror',e=>errors.push(e.message));p.on('request',r=>{if(!['GET','HEAD'].includes(r.method())||(!r.url().startsWith('http://127.0.0.1:8080')&&!r.url().startsWith('blob:')&&!r.url().startsWith('data:')))requests.push(r.url());});
+ await p.goto('http://127.0.0.1:8080');await ready(p);await seed(p);
+ // Guardar sin archivo y sin crear partida.
+ await fill(p,1,'00:02','00:04');await action(p,1,'save');await p.waitForFunction(()=>document.getElementById('clip-saved-1').textContent.includes('00:02 → 00:04'));assert.equal((await state(p)).version,3);assert.equal((await state(p)).games.length,0);
+ await upload(p);assert(await p.locator('#clip-saved-1').textContent().then(t=>t.includes('Pendiente')));
+ // Borradores independientes sobreviven a guardado y cargas adicionales.
+ await fill(p,2,'00:01','00:05');await action(p,1,'save');await p.waitForFunction(()=>document.getElementById('clip-saved-1').textContent.includes('Duración'));assert.equal(await p.locator('#clip-start-2').inputValue(),'00:01');
+ await p.locator('#audio-files').setInputFiles({name:'Extra.wav',mimeType:'audio/wav',buffer:sound});assert.equal(await p.locator('#clip-end-2').inputValue(),'00:05');
+ const before=await state(p);await action(p,1,'test');await playing(p);assert.deepEqual(await state(p),before);
+ await p.waitForFunction(()=>document.getElementById('audio-status').dataset.status==='ended');const cutoff=await p.locator('#music-player').evaluate(e=>e.currentTime);assert(cutoff>=4&&cutoff<=4.3,`Corte ${cutoff}`);
+ await action(p,1,'test');await playing(p);assert(await p.locator('#music-player').evaluate(e=>e.currentTime<2.5));await p.locator('#audio-preview-stop').click();assert(await p.locator('#music-player').evaluate(e=>e.paused));
+ await action(p,1,'test');await playing(p);await fill(p,1,'00:03','00:04');assert(await p.locator('#music-player').evaluate(e=>e.paused));await fill(p,1,'00:02','00:04');
+ // Restricciones y duración: no se guarda ni se reproduce un rango inválido.
+ await fill(p,1,'00:05','00:04');await action(p,1,'save');assert((await p.locator('#clip-error-1').textContent()).includes('posterior'));assert.deepEqual(await state(p),before);
+ await fill(p,1,'00:02','00:09');await action(p,1,'test');assert((await p.locator('#clip-error-1').textContent()).includes('no cabe'));assert(await p.locator('#music-player').evaluate(e=>e.paused));
+ await fill(p,1,'00:02','00:04');await p.evaluate(()=>{window.realUpdate=BingoStorage.update;BingoStorage.update=()=>Promise.reject(Error('No guardar'));});await action(p,1,'save');await p.waitForFunction(()=>document.getElementById('clip-error-1').textContent.includes('No se pudo guardar'));assert.equal(await p.locator('#clip-start-1').inputValue(),'00:02');assert.deepEqual(await state(p),before);await p.evaluate(()=>BingoStorage.update=window.realUpdate);
+ for(const mode of ['light','dark'])for(const palette of ['forest','ocean','plum']){await p.evaluate(v=>BingoAppearance.set(v),{mode,palette});await p.waitForTimeout(160);await p.screenshot({path:path.join(out,`${mode}-${palette}.png`)});}
+ await p.setViewportSize({width:390,height:844});assert(await p.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await p.screenshot({path:path.join(out,'mobile.png')});await p.setViewportSize({width:1440,height:1100});
+ await close(p);await p.getByRole('button',{name:'♫ Audios',exact:true}).click();assert.equal(await p.locator('#clip-start-2').inputValue(),'00:00');assert.equal(await p.locator('#clip-end-2').inputValue(),'');
+ // Metadatos inválidos y archivo de menor duración requieren corrección explícita.
+ await p.locator('#audio-files').setInputFiles([{name:'corto.wav',mimeType:'audio/wav',buffer:wav(1)},{name:'roto.wav',mimeType:'audio/wav',buffer:Buffer.from('bad')}]);await p.locator('#audio-link-1').selectOption('2');await action(p,1,'test');await p.waitForFunction(()=>document.getElementById('clip-error-1').textContent.includes('no cabe'));
+ await p.locator('#audio-link-1').selectOption('3');await action(p,1,'test');await p.waitForFunction(()=>document.getElementById('clip-error-1').textContent.includes('No se pudo'));await p.locator('#audio-link-1').selectOption('0');
+ // Fin vacío, reset y persistencia sin cambiar otros números.
+ await fill(p,2,'00:01','');await action(p,2,'save');await p.waitForFunction(()=>document.getElementById('clip-saved-2').textContent.includes('00:01 → final'));await action(p,2,'reset');await p.waitForFunction(()=>document.getElementById('clip-start-2').value==='00:00');await close(p);
+ await p.getByRole('button',{name:'Jugar →'}).click();await p.locator('#game-form button[type=submit]').click();await p.waitForFunction(()=>!document.getElementById('game-dialog').open);await p.evaluate(()=>Bingo.draw=()=>1);await p.locator('#draw').click();await playing(p);
+ await p.locator('#audio-play').click();const position=await p.locator('#music-player').evaluate(e=>e.currentTime);await p.locator('#audio-play').click();await playing(p);assert(await p.locator('#music-player').evaluate(e=>e.currentTime)>=position);
+ await p.locator('#audio-restart').click();await playing(p);assert(await p.locator('#music-player').evaluate(e=>e.currentTime<2.5));
+ // Abrir configuración pausa; preescuchar otra fila no modifica sorteo.
+ const gameBefore=await state(p);await p.locator('#audio-open').click();assert(await p.locator('#music-player').evaluate(e=>e.paused));await fill(p,2,'00:02','00:04');await action(p,2,'test');await playing(p);await close(p);assert(await p.locator('#music-player').evaluate(e=>e.paused));assert.deepEqual(await state(p),gameBefore);await p.locator('#audio-play').click();await playing(p);
+ await p.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});assert(await p.locator('#music-player').evaluate(e=>e.paused));await p.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'));});assert(await p.locator('#music-player').evaluate(e=>e.paused));
+ await p.locator('#expand').click();await p.locator('#audio-play').click();await playing(p);await p.waitForFunction(()=>document.getElementById('audio-status').dataset.status==='ended');assert.equal((await state(p)).games[0].drawn.length,1);await p.locator('#expand').click();
+ const saved=await state(p);await p.reload();await ready(p);assert.equal(await p.locator('#audio-status').getAttribute('data-status'),'missing');assert.deepEqual(await state(p),saved);
+ await p.locator('#audio-open').click();await upload(p);assert.equal(await p.locator('#clip-start-1').inputValue(),'00:02');await close(p);await p.locator('#audio-play').click();await playing(p);
+ await p.locator('[data-view="sets"]').click();const dp=p.waitForEvent('download');await p.locator('#export').click();const download=await dp;assert.deepEqual(JSON.parse(fs.readFileSync(await download.path(),'utf8')),saved);
+ const invalid=structuredClone(saved);invalid.sets[0].clips[0].end=1;await p.locator('#import-file').setInputFiles({name:'bad.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(invalid))});await p.waitForFunction(()=>document.getElementById('notice').textContent.startsWith('No se pudo restaurar'));assert.deepEqual(await state(p),saved);
+ await p.locator('#import-file').setInputFiles({name:'backup.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(saved))});await p.locator('#confirm-import').click();await p.waitForFunction(()=>!document.getElementById('confirm-dialog').open);assert.deepEqual(await state(p),saved);assert(await p.locator('#music-player').evaluate(e=>e.paused));
+ // Recursos locales y de subdirectorio: misma preescucha sin servidor de audio.
+ server=http.createServer((req,res)=>{const name=req.url.replace(/^\/bingo\//,'');if(!['index.html','styles.css','js/appearance.js','js/domain.js','js/storage.js','js/music-print.js','js/music-audio.js','js/app.js'].includes(name)){res.writeHead(404).end();return;}res.setHeader('Content-Type',name.endsWith('.js')?'text/javascript':name.endsWith('.css')?'text/css':'text/html');res.end(fs.readFileSync(path.join(__dirname,'..',name)));});await new Promise((ok,no)=>{server.on('error',no);server.listen(0,'127.0.0.1',ok);});
+ for(const url of ['file:///'+path.resolve('index.html').replaceAll('\\','/'),`http://127.0.0.1:${server.address().port}/bingo/index.html`]){const q=await browser.newPage();await q.goto(url);await ready(q);await seed(q);await upload(q);await fill(q,1,'00:02','00:04');await action(q,1,'test');await playing(q);await q.waitForFunction(()=>document.getElementById('audio-status').dataset.status==='ended');assert(await q.locator('#music-player').evaluate(e=>e.currentTime<=4.3));await q.close();}
+ assert.deepEqual(errors,[]);assert.deepEqual(requests,[]);fs.writeFileSync(path.join(out,'result.json'),JSON.stringify({cutoff,expectedEnd:4,tolerance:.3,passed:true},null,2));console.log('PASS fragmentos: guardado, migración, preescucha sin partida, borradores, validaciones, duración, corte, pausa, reinicio, contextos, temas, móvil, respaldos, recarga, file y subdirectorio. Corte medido: '+cutoff);await browser.close();server.close();
+})().catch(async e=>{console.error(e);if(browser)await browser.close();if(server)server.close();process.exitCode=1;});
