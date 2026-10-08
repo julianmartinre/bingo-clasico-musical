@@ -287,3 +287,18 @@ select option{background:var(--white);color:var(--ink)}
 .clip-actions{display:flex;flex-wrap:wrap;gap:8px}.clip-actions .button{font-size:11px;padding:9px}
 #audio-preview-status{overflow-wrap:anywhere}
 @media(max-width:650px){.clip-editor{grid-template-columns:1fr}.clip-actions .button{width:100%}}
+.reference-editor { grid-column: 1 / -1; min-width: 0; padding-top: .5rem; }
+.reference-status { overflow-wrap: anywhere; color: var(--muted); font-size: .85rem; }
+#songs-folder, #audio-folder { max-width: 100%; }
+.audio-link { min-width: 0; }
+.reference-editor input { width: 100%; box-sizing: border-box; }
+.reference-editor .inline-error:empty { display: none; }
+
+.folder-review { max-height: 34rem; overflow-y: auto; margin-top: 1rem; }
+.folder-song { padding: 1rem .3rem; border-top: 1px solid var(--line); }
+.folder-song .folder-include { display: flex; align-items: center; gap: .4rem; }
+.folder-song input[type=checkbox] { width: auto; margin: 0; }
+.folder-song input[aria-invalid=true] { border-color: var(--error-solid); }
+.folder-song .reference-status { margin: .5rem 0; }
+.sets-layout.musical-preparation { grid-template-columns: minmax(360px, 1fr) minmax(0, 1fr); }
+@media(max-width: 800px) { .sets-layout.musical-preparation { grid-template-columns: 1fr; } }

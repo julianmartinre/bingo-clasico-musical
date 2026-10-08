@@ -92,17 +92,56 @@ function BingoFactory() {
     const lines = missingRows.map((row, i) => row.length === 0 ? i + 1 : null).filter(Boolean);
     return { lines, line: lines.length > 0, bingo: missingRows.every(row => row.length === 0), missingRows, missing: missingRows.flat().sort((a, b) => a - b) };
   }
-  function parseSongs(bytes) {
-    let text;
-    try { text = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
-    catch { throw new Error('El archivo debe estar guardado como texto UTF-8.'); }
-    const songs = text.replace(/^\uFEFF/, '').split(/\r\n|\n|\r/).map(line => line.trim()).filter(Boolean);
-    assert(songs.length > 0, 'El archivo no contiene canciones.');
-    const seen = new Set(), duplicates = new Set();
-    songs.forEach(song => { if (seen.has(song)) duplicates.add(song); seen.add(song); });
-    return { songs, duplicates: [...duplicates] };
-  }
   const musicSize = total => Math.max(1, Math.floor(total / 6));
+  function audioReference(value) {
+    assert(value === null || typeof value === 'string', 'La ruta debe ser texto.');
+    if (value === null || !value.trim()) return null;
+    assert(!/[\x00-\x1f\x7f]/.test(value), 'La ruta contiene caracteres de control.');
+    const path = value.trim().normalize('NFC').replace(/\\/g, '/');
+    assert(!/^[a-z][a-z\d+.-]*:/i.test(path) || /^[a-z]:\//i.test(path), 'Usá una ruta local, no una URL.');
+    assert(!path.split('/').includes('..'), 'La ruta no puede contener segmentos «..».');
+    assert(!path.endsWith('/'), 'La ruta debe incluir el nombre del archivo.');
+    return value.trim();
+  }
+  function referenceKey(value) {
+    const path = (audioReference(value) || '').normalize('NFC').replace(/\\/g, '/');
+    return path.split('/').filter(part => part !== '.').join('/').replace(/^[a-z]:/i, drive => drive.toUpperCase());
+  }
+  function folderSongs(files) {
+    const rows = [], ignored = [], seen = new Map();
+    const collator = new Intl.Collator('es', { numeric: true, sensitivity: 'base' });
+    for (const file of files) {
+      const path = (file.webkitRelativePath || '').replace(/\\/g, '/');
+      let reason = '';
+      if (!/\.(mp3|wav|ogg|oga|m4a|aac|flac|opus|webm)$/i.test(file.name)) reason = 'No es un formato de audio del listado';
+      else if (!file.size) reason = 'Archivo vacío';
+      else {
+        try { if (!path || path.startsWith('/') || /^[a-z]:/i.test(path)) throw Error('Falta una ruta relativa de carpeta'); audioReference(path); }
+        catch (error) { reason = error.message; }
+      }
+      if (reason) { ignored.push({ name: path || file.name, reason }); continue; }
+      const prior = seen.get(path);
+      if (prior) {
+        if (prior.file === file || (prior.file.size === file.size && prior.file.lastModified === file.lastModified)) continue;
+        throw new Error('La carpeta contiene rutas repetidas incompatibles. Elegila nuevamente.');
+      }
+      const row = { id: String(rows.length + 1), file, relativePath: path, title: file.name.replace(/\.[^.]+$/, '').trim(), included: true };
+      rows.push(row); seen.set(path, row);
+    }
+    rows.sort((a, b) => collator.compare(a.relativePath, b.relativePath) || (a.relativePath < b.relativePath ? -1 : a.relativePath > b.relativePath ? 1 : 0));
+    return { rows, ignored };
+  }
+  function moveFolderSong(rows, id, direction) {
+    const index = rows.findIndex(row => row.id === id), target = index + direction;
+    if (![-1, 1].includes(direction) || index < 0 || target < 0 || target >= rows.length) return rows;
+    const next = [...rows]; [next[index], next[target]] = [next[target], next[index]]; return next;
+  }
+  function folderSelection(rows) {
+    const selected = rows.filter(row => row.included).map(row => ({ ...row, title: row.title.trim() }));
+    assert(selected.length, 'Incluí al menos una canción.');
+    assert(selected.every(row => row.title), 'Completá los títulos de las canciones incluidas.');
+    return selected;
+  }
   function combinations(n, k) {
     if (k < 0 || k > n) return 0n;
     k = Math.min(k, n - k);
@@ -171,9 +210,9 @@ function BingoFactory() {
     return total;
   }
   const formatTime = seconds => seconds === null ? '' : `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
-  const emptyState = () => ({ version: 3, nextCode: 1, selectedGame: null, sets: [], games: [] });
+  const emptyState = () => ({ version: 4, nextCode: 1, selectedGame: null, sets: [], games: [] });
   function validateState(input) {
-    assert(input && [1, 2, 3].includes(input.version), 'Versión de respaldo no compatible.');
+    assert(input && [1, 2, 3, 4].includes(input.version), 'Versión de respaldo no compatible.');
     assert(Array.isArray(input.sets) && Array.isArray(input.games), 'Respaldo incompleto.');
     const state = structuredClone(input), ids = new Set(), codes = new Set(), gameIds = new Set();
     if (state.version === 1) {
@@ -187,6 +226,13 @@ function BingoFactory() {
       });
       state.version = 3;
     }
+    if (state.version === 3) {
+      state.sets.forEach(set => {
+        assert(set && set.audioRefs === undefined, 'Un respaldo anterior no admite referencias de audio.');
+        if (set.mode === 'music' && Array.isArray(set.songs)) set.audioRefs = set.songs.map(() => null);
+      });
+      state.version = 4;
+    }
     const text = value => typeof value === 'string' && value.length > 0 && value.length <= 100;
     let maxCode = 0;
     state.sets.forEach(set => {
@@ -194,11 +240,13 @@ function BingoFactory() {
       ids.add(set.id);
       assert(['classic', 'music'].includes(set.mode), 'Modalidad de set inválida.');
       if (set.mode === 'music') {
-        assert(Array.isArray(set.songs) && set.songs.length > 0 && set.songs.every(song => typeof song === 'string' && song.length > 0 && song === song.trim() && !/[\r\n]/.test(song)), 'Listado de canciones inválido.');
+        assert(Array.isArray(set.songs) && set.songs.length > 0 && set.songs.every(song => typeof song === 'string' && song.length > 0 && song === song.trim()), 'Listado de canciones inválido.');
         assert(set.cardSize === musicSize(set.songs.length), 'Tamaño de cartón musical inválido.');
         assert(Array.isArray(set.clips) && set.clips.length === set.songs.length, 'Fragmentos musicales incompletos.');
         for (let i = 0; i < set.clips.length; i++) validateClip(set.clips[i]);
-      } else assert(set.songs === undefined && set.cardSize === undefined && set.clips === undefined, 'Un set clásico no debe contener un listado musical.');
+        assert(Array.isArray(set.audioRefs) && set.audioRefs.length === set.songs.length, 'Referencias musicales incompletas.');
+        for (let i = 0; i < set.audioRefs.length; i++) assert(audioReference(set.audioRefs[i]) === set.audioRefs[i], 'Referencia musical inválida.');
+      } else assert(set.songs === undefined && set.cardSize === undefined && set.clips === undefined && set.audioRefs === undefined, 'Un set clásico no debe contener un listado musical.');
       assert(Array.isArray(set.cards) && set.cards.length >= 1 && set.cards.length <= 1000, 'Cantidad de cartones inválida.');
       const prints = new Set();
       set.cards.forEach(card => {
@@ -235,7 +283,7 @@ function BingoFactory() {
     }
     throw new Error('No se encontró un cartón con ese código.');
   }
-  return { validateClip, parseTime, formatTime, randomIndex, generateCard, generateCards, validateCard, fingerprint, draw, verify, emptyState, validateState, findCard, parseSongs, musicSize, musicLimit, combinations, randomBigInt, generateMusicCards, totalFor, verifyMusic };
+  return { audioReference, referenceKey, folderSongs, moveFolderSong, folderSelection, validateClip, parseTime, formatTime, randomIndex, generateCard, generateCards, validateCard, fingerprint, draw, verify, emptyState, validateState, findCard, musicSize, musicLimit, combinations, randomBigInt, generateMusicCards, totalFor, verifyMusic };
 }
 const Bingo = BingoFactory();
 if (typeof module !== 'undefined') module.exports = Bingo;

@@ -8,7 +8,7 @@ test('asociación única, normalización, títulos repetidos y archivos homónim
   assert.equal(lib.file(set, 1).name, 'CANCION UNO.mp3');
   for (const number of [2, 3, 4, 5]) assert.equal(lib.file(set, number), null);
   lib.assign(set, 2, 1); lib.assign(set, 3, 1); assert.equal(lib.file(set, 2), lib.file(set, 3));
-  lib.add(set, [file('Don.mp3'), file('Don.mp3', 101)]); assert.equal(lib.files(set).length, 6);
+  lib.add(set, [file('Don.mp3'), file('Don.mp3', 101)]); assert.equal(lib.files(set).length, 7);
   assert.equal(lib.file(set, 2).size, 100);
   lib.assign(set, 1, -1); lib.add(set, [file('Otra.mp3')]); assert.equal(lib.file(set, 1), null);
   assert.equal(lib.files({ id: 'b', songs: [] }).length, 0);

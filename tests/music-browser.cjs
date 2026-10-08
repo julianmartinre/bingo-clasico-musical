@@ -19,13 +19,10 @@ async function rawState(page, value) {
     };
   }), value);
 }
-async function uploadSongs(page, text) {
-  await page.locator('#songs-file').setInputFiles({ name: 'canciones.txt', mimeType: 'text/plain', buffer: Buffer.from(text) });
-  await page.waitForFunction(() => !document.getElementById('songs-summary').textContent.includes('Leyendo'));
-}
+const {uploadSongs}=require('./folder-fixture.cjs');
 async function generate(page, name, songs, count = 3) {
   await page.locator('[data-view="sets"]').click(); await page.locator('#set-mode').selectOption('music');
-  await uploadSongs(page, songs.join('\n')); await page.locator('#set-name').fill(name); await page.locator('#quantity').fill(String(count)); await page.locator('#generate').click();
+  await uploadSongs(page, songs); await page.locator('#set-name').fill(name); await page.locator('#quantity').fill(String(count)); await page.locator('#generate').click();
   await page.waitForFunction(name => [...document.querySelectorAll('.set-info h3')].some(node => node.textContent === name), name);
   await page.waitForFunction(() => !document.getElementById('generate').disabled);
 }
@@ -55,21 +52,17 @@ async function restore(page, value, cancel = false) {
   await rawState(page, legacy); await page.reload(); await ready(page);
   assert.deepEqual(await rawState(page), legacy); assert.deepEqual(await state(page), B.validateState(legacy));
   await page.locator('#draw').click(); await page.waitForFunction(() => document.getElementById('draw-count').textContent === '3');
-  assert.equal((await rawState(page)).version, 3); assert.equal(await page.locator('.number-cell').count(), 90);
+  assert.equal((await rawState(page)).version, 4); assert.equal(await page.locator('.number-cell').count(), 90);
   await page.locator('[data-view="sets"]').click(); await page.locator('#set-mode').selectOption('music');
-  await uploadSongs(page, '\uFEFFPasos al costado\r\nDon\r\n \rDon\n<img src=x>');
-  assert.equal(await page.locator('#songs-preview li').count(), 4); assert.equal(await page.locator('#songs-preview img').count(), 0);
-  assert(!(await page.locator('#songs-warning').isHidden()));
-  assert.equal(await page.locator('#quantity').getAttribute('max'), '4');
-  await uploadSongs(page, ' \n'); assert(await page.locator('#generate').isDisabled());
-  await page.locator('#songs-file').setInputFiles({ name: 'invalid.txt', mimeType: 'text/plain', buffer: Buffer.from([0xc3, 0x28]) });
-  await page.waitForFunction(() => document.getElementById('songs-summary').textContent.includes('UTF-8'));
-  assert(await page.locator('#generate').isDisabled());
+  await uploadSongs(page, ['Pasos al costado','Don','Don','<img src=x>']);
+  assert.equal(await page.locator('.folder-song').count(),4);assert.equal(await page.locator('#folder-review img').count(),0);
+  assert(!(await page.locator('#songs-warning').isHidden()));assert.equal(await page.locator('#quantity').getAttribute('max'),'4');
+  await page.locator('.folder-song input:not([type=checkbox])').first().fill('');assert(await page.locator('#generate').isDisabled());
   const songs = ['Pasos al costado', 'Don', ...Array.from({ length: 28 }, (_, i) => `Canción ${i + 3}`)];
   await generate(page, 'Bingo musical del sábado', songs);
   let saved = await state(page), set = saved.sets.at(-1);
   assert.equal(set.cardSize, 5); assert.equal(set.cards[0].code, 2); assert.deepEqual(set.songs, songs);
-  await uploadSongs(page, [...songs].reverse().join('\n')); assert.deepEqual((await state(page)).sets.at(-1).songs, songs);
+  await uploadSongs(page, [...songs].reverse()); assert.deepEqual((await state(page)).sets.at(-1).songs, songs);
   await page.screenshot({ path: path.join(out, '01-sets.png'), fullPage: true });
   // Un fallo de worker no persiste ni reserva códigos.
   const beforeFailure = await state(page);
@@ -142,7 +135,7 @@ async function restore(page, value, cancel = false) {
   const fileContext = await browser.newContext({ offline: true }), local = await fileContext.newPage();
   await local.goto('file:///' + path.join(__dirname, '..', 'index.html').replaceAll('\\', '/')); await ready(local); await generate(local, 'Sin red', songs, 1); assert.equal((await state(local)).sets[0].cardSize, 5);
   assert.deepEqual(errors, []); assert.deepEqual(external, []);
-  console.log('PASS musical: migración sin pérdida, TXT, cartones, sorteo, hover/foco/toque, bingo sin línea, impresión con continuaciones, respaldos mixtos, móvil y file:// sin red.');
+  console.log('PASS musical: migración sin pérdida, carpeta, cartones, sorteo, hover/foco/toque, bingo sin línea, impresión con continuaciones, respaldos mixtos, móvil y file:// sin red.');
   await browser.close();
 })().catch(async error => { console.error(error); if (browser) await browser.close(); process.exitCode = 1; });
 

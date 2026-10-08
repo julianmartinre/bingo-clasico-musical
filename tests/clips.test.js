@@ -4,11 +4,11 @@ const B = require('../js/domain.js');
 function oldState() {
   return { version: 2, nextCode: 2, selectedGame: 'g', sets: [{ id: 's', mode: 'music', name: 'Set', createdAt: '2026-10-06', songs: ['Don', 'Don'], cardSize: 1, cards: [{ code: 1, numbers: [1] }] }], games: [{ id: 'g', name: 'Ronda', setId: 's', createdAt: '2026-10-06', drawn: [1] }] };
 }
-test('migración pura 2→3 y respaldos válidos', () => {
+test('migración pura 2→4 y respaldos válidos', () => {
   const before = oldState(), copy = structuredClone(before), next = B.validateState(before);
-  assert.deepEqual(before, copy); assert.equal(next.version, 3);
+  assert.deepEqual(before, copy); assert.equal(next.version, 4);
   assert.deepEqual(next.sets[0].clips, [{ start: 0, end: null }, { start: 0, end: null }]);
-  const { clips, ...set } = next.sets[0]; assert.deepEqual(set, before.sets[0]); assert.deepEqual(next.games, before.games);
+  const { clips, audioRefs, ...set } = next.sets[0]; assert.deepEqual(set, before.sets[0]); assert.deepEqual(next.games, before.games);
   next.sets[0].clips[1] = { start: 45, end: 75 }; assert.deepEqual(B.validateState(JSON.parse(JSON.stringify(next))), next);
 });
 test('rechaza intervalos incompletos, inseguros, fuera de contrato y arrays con huecos', () => {

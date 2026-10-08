@@ -4,17 +4,10 @@ const B = require('../js/domain.js');
 const encode = text => new TextEncoder().encode(text);
 function fixture() {
   const state = B.emptyState();
-  state.sets.push({ id: 'music', mode: 'music', name: 'Canciones', createdAt: '2026-10-05', songs: Array.from({ length: 30 }, (_, i) => `Canción ${i + 1}`), cardSize: 5, clips: Array.from({ length: 30 }, () => ({ start: 0, end: null })), cards: [{ code: 1, numbers: [1, 2, 3, 4, 5] }] });
+  state.sets.push({ id: 'music', mode: 'music', name: 'Canciones', createdAt: '2026-10-05', songs: Array.from({ length: 30 }, (_, i) => `Canción ${i + 1}`), cardSize: 5, audioRefs: Array(30).fill(null), clips: Array.from({ length: 30 }, () => ({ start: 0, end: null })), cards: [{ code: 1, numbers: [1, 2, 3, 4, 5] }] });
   state.games.push({ id: 'game', name: 'Musical', createdAt: '2026-10-05', setId: 'music', drawn: [1, 2] });
   state.selectedGame = 'game'; state.nextCode = 2; return state;
 }
-test('TXT: UTF-8, BOM, tildes, saltos, vacíos, duplicados y texto literal', () => {
-  const parsed = B.parseSongs(encode('\uFEFF Pasos al costado \r\nDon\r\n\rCanción\nDon\n<img src=x>\n'));
-  assert.deepEqual(parsed.songs, ['Pasos al costado', 'Don', 'Canción', 'Don', '<img src=x>']);
-  assert.deepEqual(parsed.duplicates, ['Don']);
-  assert.throws(() => B.parseSongs(encode(' \r\n')), /no contiene/);
-  assert.throws(() => B.parseSongs(new Uint8Array([0xc3, 0x28])), /UTF-8/);
-});
 test('tamaños y cantidades posibles', () => {
   for (const [n, k] of [[1, 1], [2, 1], [30, 5], [31, 5], [60, 10], [90, 15], [120, 20]]) assert.equal(B.musicSize(n), k);
   assert.equal(B.musicLimit(1), 1); assert.equal(B.musicLimit(2), 2); assert.equal(B.musicLimit(30), 1000);
@@ -53,7 +46,7 @@ test('verificación solo bingo, falta una canción y varios ganadores', () => {
 test('datos mixtos, normalización pura y validación musical estricta', () => {
   const old = { version: 1, nextCode: 10, selectedGame: 'classic-game', sets: [{ id: 'classic', name: 'Anterior', createdAt: '2026-09-30', cards: [{ code: 9, matrix: B.generateCard() }] }], games: [{ id: 'classic-game', name: 'Ronda', setId: 'classic', createdAt: '2026-09-30', drawn: [90, 1] }] };
   const backup = structuredClone(old), normalized = B.validateState(old);
-  assert.deepEqual(old, backup); assert.equal(normalized.version, 3); assert.equal(normalized.sets[0].mode, 'classic');
+  assert.deepEqual(old, backup); assert.equal(normalized.version, 4); assert.equal(normalized.sets[0].mode, 'classic');
   assert.deepEqual(normalized.games, old.games); assert.deepEqual(normalized.sets[0].cards, old.sets[0].cards); assert.equal(normalized.nextCode, 10);
   const mixed = fixture(); mixed.sets.push(normalized.sets[0]); mixed.games.push(normalized.games[0]); mixed.nextCode = 10;
   assert.deepEqual(B.validateState(JSON.parse(JSON.stringify(mixed))), mixed);

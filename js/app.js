@@ -3,11 +3,13 @@
   const $ = id => document.getElementById(id);
   let state = Bingo.emptyState(), writable = false, busy = false, snapshot = null, previewSet = null, previewPage = 0, pendingImport = null, lockPending = false;
   let releaseLock, noticeTimer;
-  let draftSongs = [], loadToken = 0, musicPages = [], boardSetId;
+  let draftSongs = [], folderRows = [], folderIgnored = [], folderName = '', loadToken = 0, musicPages = [], boardSetId;
+  const folderSupported = 'webkitdirectory' in $('songs-folder');
   const modeName = set => set?.mode === 'music' ? 'Musical' : 'Clásico';
   const game = () => state.games.find(g => g.id === state.selectedGame);
   const setFor = g => state.sets.find(s => s.id === g?.setId);
   const audioLibrary = BingoMusicAudio.library();
+  const referenceDrafts = new Map();
   const audioPlayer = BingoMusicAudio.player($('music-player'), renderAudio);
   let audioSet, audioTrigger, previewNumber = null;
   const clipDrafts = new Map(), audioMetadata = BingoMusicAudio.metadata();
@@ -94,8 +96,7 @@
     if (!editingSet()) return;
     audioSet = editingSet();
     const files = audioLibrary.files(audioSet);
-    const count = audioSet.songs.filter((_, i) => audioLibrary.file(audioSet, i + 1)).length;
-    $('audio-summary').textContent = `${count} con audio · ${audioSet.songs.length - count} sin audio · ${files.length} archivos locales`;
+    $('audio-summary').textContent = associationSummary(audioLibrary, audioSet);
     $('audio-links').replaceChildren();
     audioSet.songs.forEach((title, index) => {
       const number = index + 1, row = element('div', 'audio-link'), label = element('label', '', `${number} · ${title}`), select = element('select');
@@ -103,8 +104,8 @@
       select.append(new Option('Sin audio', ''));
       files.forEach((file, i) => {
         const ambiguous = files.filter(candidate => candidate.name === file.name).length > 1;
-        const detail = ambiguous ? ` · ${Math.ceil(file.size / 1024)} KB · ${new Date(file.lastModified).toLocaleString()}` : '';
-        select.append(new Option(file.name + detail, String(i)));
+        const detail = ambiguous ? ` · #${i + 1} · ${Math.ceil(file.size / 1024)} KB · ${new Date(file.lastModified).toLocaleString()}` : '';
+        select.append(new Option((file.webkitRelativePath || file.name) + detail, String(i)));
       });
       const assigned = files.indexOf(audioLibrary.file(audioSet, number)); select.value = assigned < 0 ? '' : String(assigned);
       select.onchange = () => {
@@ -113,8 +114,8 @@
         stopPreview(number);
         audioLibrary.assign(audioSet, number, select.value === '' ? -1 : Number(select.value));
         syncAudio();
-        const count = audioSet.songs.filter((_, i) => audioLibrary.file(audioSet, i + 1)).length;
-        $('audio-summary').textContent = `${count} con audio · ${audioSet.songs.length - count} sin audio · ${files.length} archivos locales`;
+        $('audio-summary').textContent = associationSummary(audioLibrary, audioSet);
+        $(`reference-status-${number}`).textContent = associationText(audioLibrary.result(audioSet, number));
       };
       const saved = audioSet.clips[index];
       if (!clipDrafts.has(number)) clipDrafts.set(number, { start: Bingo.formatTime(saved.start), end: Bingo.formatTime(saved.end), error: '', working: false });
@@ -131,14 +132,14 @@
       [['save', 'Guardar fragmento'], ['reset', 'Restablecer canción completa'], ['test', 'Probar fragmento']].forEach(([action, text]) => {
         const button = element('button', 'button secondary', text); button.type = 'button'; button.dataset.clipAction = action; button.onclick = () => clipAction(number, action); actions.append(button);
       });
-      editor.append(summary, error, actions); row.append(label, select, editor); $('audio-links').append(row); updateClipRow(number);
+      editor.append(summary, error, actions); row.append(label, select, referenceEditor(audioSet, number), editor); $('audio-links').append(row); updateClipRow(number);
     });
   }
   function openAudio(set, trigger) {
     if (!writable || busy || set?.mode !== 'music') return;
-    audioPlayer.pause(); clipDrafts.clear(); previewNumber = null;
+    audioPlayer.pause(); clipDrafts.clear(); referenceDrafts.clear(); previewNumber = null;
     audioSet = set; audioTrigger = trigger; $('audio-files').value = '';
-    $('audio-set-name').textContent = set.name; renderAudioLinks(); $('audio-dialog').showModal();
+    $('audio-set-name').textContent = set.name; renderAudioLinks(); $('audio-dialog').showModal(); $('audio-links').scrollTop = 0;
   }
   function notice(message, error = false) {
     clearTimeout(noticeTimer); $('notice').textContent = message; $('notice').classList.toggle('error', error); $('notice').hidden = false;
@@ -147,6 +148,74 @@
   function element(tag, className, text) {
     const node = document.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text; return node;
   }
+  function associationText(result) {
+    if (result.file) return `Asociado por ${result.method}: ${result.file.webkitRelativePath || result.file.name}${result.method === 'nombre' ? ' · carpeta absoluta no comprobada' : ''}`;
+    return result.status === 'ambiguous' ? 'Ambiguo: elegí el archivo correcto.' : result.status === 'no-reference' ? 'Sin referencia · sin audio por título.' : result.method === 'manual' ? 'Sin audio · elección manual.' : 'Faltante: seleccioná la carpeta o el archivo.';
+  }
+  function associationSummary(library, set) {
+    const counts = { associated: 0, missing: 0, ambiguous: 0, 'no-reference': 0 };
+    set.songs.forEach((_, i) => counts[library.result(set, i + 1).status]++);
+    return `${counts.associated} con audio · ${set.songs.length - counts.associated} sin audio · ${counts.missing} faltantes · ${counts.ambiguous} ambiguos · ${counts['no-reference']} sin referencia · ${library.files(set).length} archivos locales`;
+  }
+  function referenceEditor(set, number) {
+    const prefix = 'reference', library = audioLibrary;
+    const root = element('div', 'reference-editor'), input = element('input'), label = element('label', '', 'Ruta de referencia (opcional)'), status = element('p', 'reference-status'), error = element('p', 'inline-error');
+    const drafts = referenceDrafts;
+    input.id = `${prefix}-${number}`; label.htmlFor = input.id; input.value = drafts.get(number) ?? set.audioRefs[number - 1] ?? '';
+    input.placeholder = 'Musica/tema.mp3'; input.autocomplete = 'off';
+    status.id = `${prefix}-status-${number}`; status.textContent = associationText(library.result(set, number)); status.setAttribute('role', 'status');
+    error.id = `${prefix}-error-${number}`; error.setAttribute('role', 'status'); input.setAttribute('aria-describedby', error.id);
+    input.oninput = () => { drafts.set(number, input.value); error.textContent = ''; };
+    const actions = element('div', 'clip-actions'), save = element('button', 'button secondary', 'Guardar ruta'), automatic = element('button', 'text-button', 'Volver a asociar automáticamente');
+    save.type = automatic.type = 'button'; save.dataset.referenceSave = number; automatic.dataset.referenceAuto = number;
+    save.onclick = async () => {
+      if (!writable || busy) return;
+      try {
+        const reference = Bingo.audioReference(input.value);
+        {
+          const ok = await mutate(current => { current.sets.find(item => item.id === set.id).audioRefs[number - 1] = reference; return current; });
+          if (!ok) throw new Error('No se pudo guardar la ruta. Se conserva la anterior.');
+          const target = state.sets.find(item => item.id === set.id);
+          cancelClipRequests(); stopPreview(); library.automatic(target, number); referenceDrafts.delete(number);
+          if (editingSet()?.id === set.id) renderAudioLinks(); syncAudio();
+        }
+      } catch (failure) { error.textContent = failure.message; }
+    };
+    automatic.onclick = () => {
+      if (!writable || busy) return;
+      cancelClipRequests(); stopPreview();
+      library.automatic(editingSet(), number); renderAudioLinks(); syncAudio();
+    };
+    actions.append(save, automatic); root.append(label, input, actions, status, error); return root;
+  }
+  function renderFolderReview(focusId, direction) {
+    const fragment = document.createDocumentFragment();
+    folderRows.forEach((row, index) => {
+      const group = element('div', 'folder-song'); group.dataset.rowId = row.id;
+      const include = element('input'), includeLabel = element('label', 'folder-include'), number = element('span', 'folder-number');
+      include.type = 'checkbox'; include.checked = row.included; include.id = `folder-include-${row.id}`;
+      includeLabel.htmlFor = include.id; includeLabel.append(include, document.createTextNode('Incluir '), number);
+      include.onchange = () => { if (!writable || busy) return; row.included = include.checked; updateDraft(); };
+      const title = element('input'), label = element('label', '', 'Título de la canción'); title.value = row.title; title.id = `folder-title-${row.id}`; label.htmlFor = title.id;
+      title.oninput = () => { if (!writable || busy) return; row.title = title.value; updateDraft(); };
+      const source = element('p', 'reference-status', row.relativePath), actions = element('div', 'clip-actions');
+      [-1, 1].forEach(step => {
+        const button = element('button', 'button secondary', step < 0 ? '↑ Subir' : '↓ Bajar'); button.type = 'button'; button.dataset.move = step;
+        button.setAttribute('aria-label', `${step < 0 ? 'Subir' : 'Bajar'} canción ${index + 1}`);
+        button.onclick = () => {
+          if (!writable || busy) return;
+          folderRows = Bingo.moveFolderSong(folderRows, row.id, step); renderFolderReview(row.id, step);
+          $('folder-announcement').textContent = `Canción movida a la posición ${folderRows.findIndex(item => item.id === row.id) + 1}.`;
+        }; actions.append(button);
+      });
+      group.append(includeLabel, label, title, source, actions); fragment.append(group);
+    });
+    $('folder-review').replaceChildren(fragment); updateDraft();
+    if (focusId) {
+      const group = document.querySelector(`[data-row-id="${focusId}"]`), button = group.querySelector(`[data-move="${direction}"]`);
+      (button.disabled ? group.querySelector('input[type=checkbox]') : button).focus();
+    }
+  }
   function showView(name) {
     $('game-view').hidden = name !== 'game'; $('sets-view').hidden = name !== 'sets';
     document.querySelectorAll('[data-view]').forEach(button => { const active = button.dataset.view === name; button.classList.toggle('active', active); if (active) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
@@ -154,8 +223,15 @@
   }
   function controls() {
     const disabled = !writable || busy;
-    ['new-game', 'generate', 'import', 'game-select', 'game-set', 'confirm-import', 'set-mode', 'songs-file'].forEach(id => $(id).disabled = disabled);
-    $('generate').disabled = disabled || ($('set-mode').value === 'music' && !draftSongs.length);
+    ['new-game', 'generate', 'import', 'game-select', 'game-set', 'confirm-import', 'set-mode', 'songs-folder'].forEach(id => $(id).disabled = disabled);
+    document.querySelectorAll('#folder-review input, #folder-review button, #audio-links input, #audio-links select, .reference-editor button, #audio-files, #audio-folder').forEach(node => node.disabled = disabled);
+    $('songs-folder').disabled = disabled || !folderSupported;
+    folderRows.forEach((row, i) => {
+      const group = document.querySelector(`[data-row-id="${row.id}"]`); if (!group) return;
+      group.querySelector('[data-move="-1"]').disabled = disabled || i === 0;
+      group.querySelector('[data-move="1"]').disabled = disabled || i === folderRows.length - 1;
+    });
+    $('generate').disabled = disabled || ($('set-mode').value === 'music' && (!draftSongs.length || draftSongs.some(song => !song)));
     $('new-game').disabled = disabled || !state.sets.length;
     $('draw').disabled = disabled || !game() || game().drawn.length >= Bingo.totalFor(setFor(game())) || Boolean(snapshot);
     $('verify-open').disabled = !writable || busy || !game();
@@ -322,11 +398,11 @@
     cancelClipRequests(); stopPreview(); audioSet = null; clipDrafts.clear(); $('audio-links').replaceChildren(); $('audio-files').value = ''; syncAudio(); audioTrigger?.focus();
   });
   $('audio-preview-stop').onclick = () => { cancelClipRequests(); stopPreview(); clipDrafts.forEach((_, n) => updateClipRow(n)); };
-  $('audio-files').onchange = () => {
-    if (!audioSet || !writable || !$('audio-files').files.length) return;
+  ['audio-files', 'audio-folder'].forEach(id => $(id).onchange = () => {
+    if (!audioSet || !writable || busy || !$(id).files.length) return;
     cancelClipRequests(); stopPreview();
-    audioLibrary.add(audioSet, $('audio-files').files); $('audio-files').value = ''; renderAudioLinks(); syncAudio();
-  };
+    audioLibrary.add(editingSet(), $(id).files); $(id).value = ''; renderAudioLinks(); syncAudio();
+  });
   $('audio-play').onclick = () => {
     if (!writable || busy || snapshot) return;
     if (['playing', 'loading'].includes(audioPlayer.read().status)) audioPlayer.pause(); else audioPlayer.play();
@@ -336,45 +412,55 @@
   $('go-sets').onclick = () => { showView('sets'); $('set-name').focus(); };
   $('new-game').onclick = () => openGame(); $('take-control').onclick = acquireLock;
   function updateDraft() {
-    const musical = $('set-mode').value === 'music', total = draftSongs.length;
-    $('music-upload').hidden = !musical;
+    const musical = $('set-mode').value === 'music', included = folderRows.filter(row => row.included);
+    draftSongs = included.map(row => row.title.trim()); const total = draftSongs.length;
+    $('music-upload').hidden = !musical; $('folder-support').hidden = folderSupported;
+    document.querySelector('.sets-layout').classList.toggle('musical-preparation', musical);
     const max = musical && total ? Bingo.musicLimit(total) : 1000;
     $('quantity').max = max;
     if (Number($('quantity').value) > max) $('quantity').value = max;
-    $('quantity-help').textContent = musical ? total ? `Entre 1 y ${max} cartones · ${Bingo.musicSize(total)} canciones por cartón` : 'Primero cargá el listado de canciones.' : 'Entre 1 y 1000 · 15 números por cartón';
+    $('quantity-help').textContent = musical ? total ? `Entre 1 y ${max} cartones · ${Bingo.musicSize(total)} canciones por cartón` : 'Primero incluí canciones de una carpeta.' : 'Entre 1 y 1000 · 15 números por cartón';
     $('print-help').textContent = musical ? 'Número y nombre de cada canción. Hojas A4 adaptadas al contenido.' : '6 cartones por hoja A4, con su código y guías de corte.';
+    $('songs-summary').textContent = folderRows.length ? `${folderName} · ${total} canciones incluidas · ${folderRows.length - total} excluidas · ${folderIgnored.length} archivos ignorados${total ? ` · ${Bingo.musicSize(total)} por cartón` : ''}` : 'Elegí una carpeta con tus canciones.';
+    const duplicates = draftSongs.filter((song, i) => song && draftSongs.indexOf(song) !== i);
+    $('songs-warning').hidden = !duplicates.length && !draftSongs.some(song => !song);
+    $('songs-warning').textContent = draftSongs.some(song => !song) ? 'Completá los títulos vacíos de las canciones incluidas.' : duplicates.length ? 'Hay títulos repetidos. Se conservarán como canciones independientes.' : '';
+    let number = 0;
+    folderRows.forEach(row => {
+      const group = document.querySelector(`[data-row-id="${row.id}"]`); if (!group) return;
+      group.querySelector('.folder-number').textContent = row.included ? `· N.º ${++number}` : '· excluida';
+      const title = group.querySelector('input:not([type=checkbox])'); title.setAttribute('aria-invalid', String(row.included && !row.title.trim()));
+    });
     controls();
   }
-  $('set-mode').onchange = () => {
-    loadToken++; draftSongs = []; $('songs-file').value = ''; $('songs-preview').replaceChildren();
-    $('songs-summary').textContent = 'Cargá un TXT con una canción por línea.';
-    $('songs-warning').hidden = true; $('songs-details').hidden = true; updateDraft();
-  };
-  $('songs-file').onchange = async () => {
-    const file = $('songs-file').files[0], token = ++loadToken;
-    draftSongs = []; $('songs-preview').replaceChildren(); $('songs-details').hidden = true; $('songs-warning').hidden = true; updateDraft();
-    if (!file) { $('songs-summary').textContent = 'Cargá un TXT con una canción por línea.'; return; }
-    $('songs-summary').textContent = 'Leyendo canciones…';
+  function clearDraft() {
+    loadToken++; folderRows = []; folderIgnored = []; folderName = ''; draftSongs = [];
+    $('songs-folder').value = ''; $('folder-review').replaceChildren(); $('folder-ignored').hidden = true; $('folder-ignored-list').replaceChildren(); $('folder-announcement').textContent = '';
+  }
+  $('set-mode').onchange = () => { if (!writable || busy) return; clearDraft(); updateDraft(); };
+  $('songs-folder').onchange = () => {
+    if (!writable || busy || !folderSupported || !$('songs-folder').files.length) return;
+    const token = ++loadToken, files = [...$('songs-folder').files]; $('songs-folder').value = '';
     try {
-      if (!/\.txt$/i.test(file.name)) throw new Error('Elegí un archivo con extensión .txt.');
-      const parsed = Bingo.parseSongs(await file.arrayBuffer());
+      const result = Bingo.folderSongs(files);
       if (token !== loadToken) return;
-      draftSongs = parsed.songs;
-      $('songs-summary').textContent = `${draftSongs.length} canciones · ${Bingo.musicSize(draftSongs.length)} por cartón · Solo bingo completo`;
-      $('songs-warning').hidden = !parsed.duplicates.length;
-      $('songs-warning').textContent = parsed.duplicates.length ? `${parsed.duplicates.length} títulos repetidos: se conservarán como números distintos.` : '';
-      const fragment = document.createDocumentFragment();
-      draftSongs.forEach(song => fragment.append(element('li', '', song)));
-      $('songs-preview').append(fragment); $('songs-details').hidden = false;
-    } catch (error) { if (token === loadToken) $('songs-summary').textContent = error.message; }
-    finally { if (token === loadToken) updateDraft(); }
+      if (!result.rows.length) throw new Error(`La carpeta no contiene audios válidos. ${result.ignored.length} archivos ignorados: ${[...new Set(result.ignored.map(item => item.reason))].join("; ")}. Se conserva la revisión anterior.`);
+      folderRows = result.rows; folderIgnored = result.ignored; folderName = folderRows[0].relativePath.split('/')[0];
+      $('folder-ignored-list').replaceChildren(...folderIgnored.map(item => element('li', '', `${item.name}: ${item.reason}`)));
+      $('folder-ignored').hidden = !folderIgnored.length; $('folder-announcement').textContent = 'Carpeta cargada. Revisá los títulos y el orden antes de generar.';
+      renderFolderReview();
+    } catch (error) { if (token === loadToken) notice(error.message, true); }
   };
   $('expand').onclick = () => { const expanded = document.body.classList.toggle('expanded'); $('expand').textContent = expanded ? '↙ Volver a vista normal' : '⛶ Ampliar tablero'; };
   document.addEventListener('keydown', event => { if (event.key === 'Escape' && !document.querySelector('dialog[open]')) { document.body.classList.remove('expanded'); $('expand').textContent = '⛶ Ampliar tablero'; } });
   $('generate-form').onsubmit = async event => {
     event.preventDefault(); if (!writable || busy) return;
     const name = $('set-name').value.trim(), count = Number($('quantity').value);
-    const mode = $('set-mode').value, songs = [...draftSongs];
+    const mode = $('set-mode').value;
+    let selected = [];
+    try { if (mode === 'music') selected = Bingo.folderSelection(folderRows); } catch (error) { return notice(error.message, true); }
+    const songs = selected.map(row => row.title), audioRefs = selected.map(row => row.relativePath);
+    let createdId;
     if (!name) return notice('Ingresá un nombre para el set.', true);
     if (!Number.isInteger(count) || count < 1 || count > 1000) return notice('Elegí entre 1 y 1000 cartones.', true);
     if (mode === 'music' && (!songs.length || count > Bingo.musicLimit(songs.length))) return notice('Revisá el listado y la cantidad máxima de cartones.', true);
@@ -384,9 +470,11 @@
       state = await BingoStorage.update(current => {
         if (current.nextCode + count >= Number.MAX_SAFE_INTEGER) throw new Error('Se alcanzó el límite de códigos.');
         const set = { id: crypto.randomUUID(), name, mode, createdAt: new Date().toISOString(), cards: generated.map(values => ({ code: current.nextCode++, ...(mode === 'music' ? { numbers: values } : { matrix: values }) })) };
-        if (mode === 'music') { set.songs = songs; set.clips = songs.map(() => ({ start: 0, end: null })); set.cardSize = Bingo.musicSize(songs.length); }
+        createdId = set.id;
+        if (mode === 'music') { set.songs = songs; set.audioRefs = audioRefs; set.clips = songs.map(() => ({ start: 0, end: null })); set.cardSize = Bingo.musicSize(songs.length); }
         current.sets.push(set); return current;
       });
+      if (mode === 'music') { const target = state.sets.find(set => set.id === createdId); audioLibrary.add(target, selected.map(row => row.file)); const files = audioLibrary.files(target); selected.forEach((row, i) => audioLibrary.assign(target, i + 1, files.indexOf(row.file))); }
       render(); notice(`${count} cartones guardados. Recordá descargar un respaldo antes de imprimir.`); $('set-name').value = '';
     } catch (error) { notice(error.message, true); }
     finally { busy = false; controls(); }

@@ -6,29 +6,51 @@ const BingoMusicAudio = (() => {
   function library() {
     const sets = new Map();
     function get(set) {
-      if (!sets.has(set.id)) sets.set(set.id, { files: [], links: new Map() });
+      if (!sets.has(set.id)) sets.set(set.id, { files: [], links: new Map(), results: new Map() });
       return sets.get(set.id);
+    }
+    function resolve(set) {
+      const data = get(set), titles = set.songs.map(normalize);
+      const paths = data.files.map(file => { try { return domain.referenceKey(file.webkitRelativePath || null); } catch { return ''; } });
+      set.songs.forEach((_, i) => {
+        const number = i + 1;
+        if (data.links.has(number)) {
+          const file = data.links.get(number);
+          data.results.set(number, { file, status: file ? 'associated' : 'missing', method: 'manual' }); return;
+        }
+        const ref = domain.referenceKey(set.audioRefs?.[i] || null), absolute = /^(?:[a-z]:\/|\/)/i.test(ref);
+        const levels = ref ? [
+          ['ruta', (_, j) => paths[j] && (paths[j] === ref || paths[j].split('/').slice(1).join('/') === ref)],
+          ['ruta', (_, j) => absolute && paths[j] && ref.endsWith('/' + paths[j])],
+          ['nombre', file => file.name.normalize('NFC') === ref.split('/').at(-1)]
+        ] : [['título', file => titles.filter(title => title === titles[i]).length === 1 && filename(file) === titles[i]]];
+        let result = { file: null, status: ref ? 'missing' : 'no-reference', method: '' };
+        for (const [method, match] of levels) {
+          const matches = data.files.filter(match);
+          if (!matches.length) continue;
+          result = { file: matches.length === 1 ? matches[0] : null, status: matches.length === 1 ? 'associated' : 'ambiguous', method }; break;
+        }
+        data.results.set(number, result);
+      });
     }
     return {
       files: set => [...get(set).files],
-      file: (set, number) => get(set).links.get(number) || null,
+      file: (set, number) => get(set).results.get(number)?.file || null,
+      result: (set, number) => get(set).results.get(number) || { file: null, status: set.audioRefs?.[number - 1] ? 'missing' : 'no-reference', method: '' },
+      automatic(set, number) { get(set).links.delete(number); resolve(set); },
       assign(set, number, index) {
         if (!Number.isInteger(number) || number < 1 || number > set.songs.length) return;
         const data = get(set), file = data.files[index];
         // Una desvinculación explícita tampoco se vuelve a asociar al agregar archivos.
         data.links.set(number, file || null);
+        resolve(set);
       },
       add(set, files) {
         const data = get(set);
         for (const file of files) {
-          if (!data.files.some(f => f.name === file.name && f.size === file.size && f.lastModified === file.lastModified)) data.files.push(file);
+          if (!data.files.some(f => f === file || (file.webkitRelativePath && f.webkitRelativePath === file.webkitRelativePath && f.size === file.size && f.lastModified === file.lastModified))) data.files.push(file);
         }
-        const titles = set.songs.map(normalize);
-        titles.forEach((title, i) => {
-          if (data.links.has(i + 1) || titles.filter(t => t === title).length !== 1) return;
-          const matches = data.files.filter(file => filename(file) === title);
-          if (matches.length === 1) data.links.set(i + 1, matches[0]);
-        });
+        resolve(set);
       },
       clear: () => sets.clear()
     };

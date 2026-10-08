@@ -52,30 +52,21 @@ En **Mis cartones → Restaurar**, seleccioná un respaldo JSON y revisá la can
 
 ## Bingo musical
 
-En **Mis cartones**, elegí **Musical · tus canciones**. Cargá un archivo `.txt` guardado en UTF-8 con una canción por línea, por ejemplo:
+En **Mis cartones**, elegí **Musical · tus canciones**, cargá una carpeta de audios y revisá títulos, inclusión y orden. La lista se forma automáticamente desde los nombres de archivo. Los números quedan fijos al generar. Con 30 canciones incluidas, cada cartón tiene 5; el tamaño sigue la regla `max(1, floor(N / 6))` y solo se permite la cantidad de cartones únicos disponible.
 
-```text
-Pasos al costado
-Don
-```
-
-El 1 corresponde a Pasos al costado y el 2 a Don. Se ignoran líneas vacías y espacios exteriores; se admiten saltos de Windows y otros sistemas. Los títulos repetidos conservan números distintos y generan un aviso. La vista previa muestra el orden exacto antes de guardar. El archivo permanece en tu computadora.
-
-Cada cartón contiene una sexta parte del listado, redondeada hacia abajo, con al menos una canción: 30 → 5, 31 → 5, 60 → 10, 90 → 15, 120 → 20. Elegís la cantidad de cartones por separado, hasta 1000 y sin superar las combinaciones diferentes posibles. Con dos canciones solo existen dos cartones de una canción.
-
-Las casillas muestran **número y nombre**; el **código de cartón** sirve para verificar el reclamo. Ambos números cumplen funciones distintas. Cargar otro TXT no cambia los sets ya guardados.
+Las casillas muestran **número y nombre**; el **código de cartón** sirve para verificar el reclamo. Ambos números cumplen funciones distintas. Elegir otra carpeta no cambia los sets ya guardados.
 
 Creá una partida con el set musical. Su bolillero tendrá tantas bolillas como canciones. Al sacar una, aparece su número y nombre. Pasá el mouse, enfocá con Tab o tocá un número del tablero o historial para consultar la canción sin alterar el sorteo. Escape cierra la consulta.
 
-En musical se gana **solo con el cartón completo**. El verificador muestra canciones acertadas y faltantes, sin premio por línea. El clásico mantiene sus reglas anteriores. La aplicación no reproduce audio.
+En musical se gana **solo con el cartón completo**. El verificador muestra canciones acertadas y faltantes, sin premio por línea. El clásico mantiene sus reglas anteriores. El audio local es opcional y se configura por set.
 
 La impresión musical usa A4 con distribución adaptada a los nombres completos. Los cartones largos pueden continuar en otra hoja: cada parte repite el código del cartón. Seleccioná A4, 100 % y desactivá encabezados/pies del navegador. La vista previa contiene las mismas páginas que se imprimen. El clásico sigue imprimiendo seis cartones por hoja.
 
 ### Datos anteriores y respaldos
 
-La aplicación acepta respaldos versión 1 y 2 y los adapta en memoria a versión 3; conserva cartones, códigos, bolillas e historial y agrega canción completa como fragmento inicial. El cambio se guarda con la siguiente operación autorizada. Los respaldos nuevos son versión 3 y pueden contener ambos modos y los tiempos de las canciones. Restaurarlos reemplaza los datos solo después de confirmar; archivos inválidos o cancelar no cambian nada.
+La aplicación acepta respaldos versión 1, 2 y 3 y los adapta en memoria a versión 4; conserva cartones, códigos, bolillas, historial y fragmentos, agregando referencias vacías y canción completa donde no había fragmentos. El cambio se guarda con la siguiente operación autorizada. Los respaldos nuevos son versión 4 y pueden contener ambos modos, tiempos y referencias de audio. Restaurarlos reemplaza los datos solo después de confirmar; archivos inválidos o cancelar no cambian nada.
 
-Antes de actualizar, conservá un respaldo de la versión anterior si necesitás volver a ese código. Las versiones anteriores del programa no pueden leer respaldos versión 3. Cambiar entre archivo local y HTTP también requiere exportar/restaurar porque son orígenes distintos.
+Antes de actualizar, conservá un respaldo de la versión anterior si necesitás volver a ese código. Las versiones anteriores del programa no pueden leer respaldos versión 4. Cambiar entre archivo local y HTTP también requiere exportar/restaurar porque son orígenes distintos.
 
 ## Pruebas
 
@@ -102,13 +93,13 @@ Los cartones, incluso en el verificador y la vista previa, mantienen papel claro
 
 ## Audios locales del bingo musical
 
-1. Creá un set musical desde tu TXT. En el set elegí **♫ Audios**, o abrí **♫ Audios del set** en la partida.
+1. Creá un set musical desde tu carpeta de canciones. En el set elegí **♫ Audios**, o abrí **♫ Audios del set** en la partida.
 2. Seleccioná varios archivos de tu dispositivo. La aplicación relaciona nombres únicos (por ejemplo, `Don.mp3` con `Don`), ignorando extensión, mayúsculas, acentos y espacios redundantes. No quita prefijos numéricos ni nombres de artistas.
-3. Revisá el contador y los selectores por canción: los títulos repetidos o archivos ambiguos se asignan manualmente. Podés reutilizar un archivo en varios números, cambiarlo o elegir **Sin audio**. Agregar archivos conserva las asociaciones y cancelar no cambia nada.
+3. Revisá el contador y los selectores por canción: los títulos repetidos o archivos ambiguos se asignan manualmente. Podés reutilizar un archivo en varios números, cambiarlo o elegir **Sin audio**. Agregar archivos conserva elecciones manuales; las automáticas se recalculan para detectar nuevas ambigüedades. Cancelar no cambia nada.
 4. Al **Sacar bolilla**, después de guardar el resultado se reproduce su canción desde el inicio del fragmento guardado y se detiene la anterior. Si falta el audio, el juego sigue normalmente. El historial no reproduce canciones ni extrae números.
 5. Usá **Reproducir/Pausar canción**, **Volver al inicio** o **Volumen**, también en el tablero ampliado. El volumen inicial es 50 %. Si tu navegador no permite ajustarlo, usá el volumen del dispositivo. Terminar una canción no saca la siguiente bolilla.
 
-Los archivos permanecen en tu dispositivo: funciona desde GitHub Pages, archivo local o el servidor estático, sin subir los audios. Archivos y asociaciones duran solo mientras esa página está abierta. Tras recargar o restaurar un respaldo exitosamente, seleccioná los archivos nuevamente. No se guardan audios ni asociaciones en IndexedDB ni en los respaldos versión 3. Cancelar o rechazar una importación conserva las asociaciones.
+Los archivos permanecen en tu dispositivo: funciona desde GitHub Pages, archivo local o el servidor estático, sin subir los audios. Archivos y asociaciones duran solo mientras esa página está abierta. Tras recargar o restaurar un respaldo exitosamente, seleccioná los archivos nuevamente. No se guardan audios ni elecciones manuales en IndexedDB ni en los respaldos versión 4; sí se guardan las referencias escritas por el usuario para volver a asociar. Cancelar o rechazar una importación conserva las asociaciones.
 
 Al verificar un reclamo la canción se pausa y no se reanuda automáticamente al cerrar. Cambiar de partida o perder el control de la pestaña detiene la reproducción. Cambiar la apariencia o ampliar el tablero no reinicia el audio. Solo reproduce la pestaña operadora.
 
@@ -122,6 +113,22 @@ En **Audios del set**, cada número tiene **Inicio**, **Fin opcional**, **Probar
 
 **Guardar fragmento** guarda únicamente esa fila. **Restablecer canción completa** guarda inicio cero y fin natural. Cerrar descarta tiempos no guardados. Podés guardar sin archivo, pero los límites quedan pendientes de comprobar. Con un archivo asociado se consulta su duración: inicio debe ser menor a la duración, y fin debe ser mayor al inicio sin superar el archivo. Si luego asociás una versión más corta, se informa del error sin ajustar los tiempos silenciosamente ni alterar el sorteo.
 
-Los tiempos se guardan con el set y en respaldos versión 3; persisten al recargar y se aplican en todas las rondas de ese set. Los archivos y sus asociaciones continúan siendo temporales y deben seleccionarse de nuevo. Títulos repetidos tienen fragmentos independientes por número.
+Los tiempos se guardan con el set y en respaldos versión 4; persisten al recargar y se aplican en todas las rondas de ese set. Los archivos y sus asociaciones continúan siendo temporales y deben seleccionarse de nuevo. Títulos repetidos tienen fragmentos independientes por número.
 
 Al sortear se usa el fragmento guardado. **Volver al inicio** y reproducir después de terminar vuelven al inicio configurado, no al segundo cero. Pausar/reanudar conserva la posición dentro del tramo. Al ocultar la pestaña se pausa el audio y no se reanuda solo al volver. El corte usa el reloj del navegador y no es una edición de audio profesional; ninguna operación modifica el archivo original.
+
+
+## Crear el musical desde una carpeta
+
+1. En **Mis cartones**, elegí **Musical** y **Cargar carpeta de canciones**. Incluye subcarpetas; es la única entrada de creación musical.
+2. Se toman los nombres de los audios sin extensión y se ordenan alfabéticamente por ruta, con números en orden natural (2 antes de 10). Cada canción ya tiene su archivo asociado.
+3. Revisá títulos, desmarcá **Incluir** para excluir canciones y usá **Subir/Bajar** para ordenar. Los cambios se aplican al borrador directamente. Los números se fijan al generar; renombrar y mover conserva el archivo de cada fila.
+4. Elegí nombre y cantidad de cartones y generá. Con 30 canciones incluidas se usan 5 por cartón. Títulos vacíos bloquean generar; repetidos son válidos y se avisan.
+
+Se reconocen MP3, WAV, OGG, OGA, M4A, AAC, FLAC, OPUS y WEBM. Otros archivos se ignoran; vacíos y rutas incompatibles muestran su motivo. La extensión no garantiza que el navegador pueda reproducir el códec: si falla, podés reemplazarlo desde Audios. No se leen etiquetas ID3 ni se quitan prefijos o nombres de artistas.
+
+Elegir otra carpeta válida reemplaza la revisión; cancelar o elegir una sin audios válidos conserva lo anterior. Cambiar de modalidad descarta el borrador. Se necesita un navegador con selector de carpetas para crear un set musical.
+
+Las referencias relativas se guardan en el set y se incluyen en el respaldo versión 4. Los audios permanecen temporales en tu dispositivo: tras recargar elegí nuevamente la carpeta desde **♫ Audios**, incluso si personalizaste títulos. Allí también podés reemplazar un archivo individual y configurar fragmentos. No se envían audios ni se guardan en el respaldo.
+
+Los sets históricos creados con TXT/CSV siguen funcionando. Se admiten respaldos de versiones 1–4 sin cambiar códigos, títulos, orden, historial ni fragmentos. Ya no se importan listados TXT/CSV para crear sets nuevos. No se requiere nueva migración respecto del estado versión 4.
