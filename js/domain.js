@@ -149,7 +149,48 @@ function BingoFactory() {
     for (let i = 1; i <= k; i++) value = value * BigInt(n - k + i) / BigInt(i);
     return value;
   }
-  const musicLimit = total => Number(combinations(total, musicSize(total)) < 1000n ? combinations(total, musicSize(total)) : 1000n);
+  function validateMusicSize(total, size) {
+    assert(Number.isSafeInteger(total) && total > 0, 'Cargá al menos una canción.');
+    assert(Number.isInteger(size) && size >= 1 && size <= Math.min(15, total), `Elegí entre 1 y ${Math.min(15, total)} canciones por cartón.`);
+    return true;
+  }
+  function musicLimit(total, size) {
+    validateMusicSize(total, size);
+    const space = combinations(total, size);
+    return Number(space < 1000n ? space : 1000n);
+  }
+  function validateMusicMatrix(matrix, numbers, total) {
+    validateMusicSize(total, numbers?.length);
+    assert(Array.isArray(numbers) && Array.from(numbers).every((n, i) => Number.isSafeInteger(n) && n >= 1 && n <= total && (!i || n > numbers[i - 1])), 'Números musicales inválidos.');
+    assert(Array.isArray(matrix) && matrix.length === 3, 'La grilla musical debe tener tres filas.');
+    const found = [], counts = [];
+    for (const row of matrix) {
+      assert(Array.isArray(row) && row.length === 9, 'La grilla musical debe tener nueve columnas.');
+      let count = 0;
+      for (const n of row) {
+        if (n === null) continue;
+        assert(Number.isSafeInteger(n) && n >= 1 && n <= total, 'Casilla musical inválida.');
+        found.push(n); count++;
+      }
+      counts.push(count);
+    }
+    assert(Math.max(...counts) <= 5 && Math.max(...counts) - Math.min(...counts) <= 1, 'Filas musicales desequilibradas.');
+    assert(found.length === numbers.length && found.every((n, i) => n === numbers[i]), 'La grilla no coincide con los números del cartón.');
+    return true;
+  }
+  function generateMusicMatrix(numbers, total, random = randomIndex) {
+    validateMusicSize(total, numbers.length);
+    const counts = Array(3).fill(Math.floor(numbers.length / 3));
+    shuffled([0, 1, 2], random).slice(0, numbers.length % 3).forEach(r => counts[r]++);
+    let index = 0;
+    const matrix = counts.map(count => {
+      const row = Array(9).fill(null);
+      shuffled([0, 1, 2, 3, 4, 5, 6, 7, 8], random).slice(0, count).sort((a, b) => a - b).forEach(c => { row[c] = numbers[index++]; });
+      return row;
+    });
+    validateMusicMatrix(matrix, numbers, total);
+    return matrix;
+  }
   function randomBigInt(limit) {
     assert(limit > 0n, 'Rango de combinaciones inválido.');
     if (limit === 1n) return 0n;
@@ -175,10 +216,11 @@ function BingoFactory() {
     }
     return result;
   }
-  function generateMusicCards(total, count, random = randomBigInt) {
+  function generateMusicCards(total, count, size, random = randomBigInt) {
     assert(Number.isSafeInteger(total) && total > 0, 'Cargá al menos una canción.');
-    const size = musicSize(total), space = combinations(total, size);
-    assert(Number.isInteger(count) && count >= 1 && count <= 1000 && BigInt(count) <= space, `Podés generar entre 1 y ${musicLimit(total)} cartones distintos.`);
+    validateMusicSize(total, size);
+    const space = combinations(total, size);
+    assert(Number.isInteger(count) && count >= 1 && count <= 1000 && BigInt(count) <= space, `Podés generar entre 1 y ${musicLimit(total, size)} cartones distintos.`);
     // Muestreo de Floyd: siempre termina, incluso si se solicita todo el espacio.
     const ranks = new Set();
     for (let j = space - BigInt(count); j < space; j++) {
@@ -210,11 +252,14 @@ function BingoFactory() {
     return total;
   }
   const formatTime = seconds => seconds === null ? '' : `${String(Math.floor(seconds / 60)).padStart(2, '0')}:${String(seconds % 60).padStart(2, '0')}`;
-  const emptyState = () => ({ version: 4, nextCode: 1, selectedGame: null, sets: [], games: [] });
+  const emptyState = () => ({ version: 5, nextCode: 1, selectedGame: null, sets: [], games: [] });
   function validateState(input) {
-    assert(input && [1, 2, 3, 4].includes(input.version), 'Versión de respaldo no compatible.');
+    assert(input && [1, 2, 3, 4, 5].includes(input.version), 'Versión de respaldo no compatible.');
     assert(Array.isArray(input.sets) && Array.isArray(input.games), 'Respaldo incompleto.');
     const state = structuredClone(input), ids = new Set(), codes = new Set(), gameIds = new Set();
+    if (state.version < 5) state.sets.forEach(set => {
+      assert(set && set.cardLayout === undefined && (!Array.isArray(set.cards) || set.cards.every(card => card && card.musicMatrix === undefined)), 'Un respaldo anterior no admite grillas musicales.');
+    });
     if (state.version === 1) {
       state.sets.forEach(set => { assert(set && !set.songs && !set.cardSize && (!set.mode || set.mode === 'classic'), 'Un respaldo versión 1 solo admite sets clásicos.'); set.mode = 'classic'; });
       state.version = 2;
@@ -233,6 +278,10 @@ function BingoFactory() {
       });
       state.version = 4;
     }
+    if (state.version === 4) {
+      state.sets.forEach(set => { if (set.mode === 'music') set.cardLayout = 'list'; });
+      state.version = 5;
+    }
     const text = value => typeof value === 'string' && value.length > 0 && value.length <= 100;
     let maxCode = 0;
     state.sets.forEach(set => {
@@ -241,22 +290,26 @@ function BingoFactory() {
       assert(['classic', 'music'].includes(set.mode), 'Modalidad de set inválida.');
       if (set.mode === 'music') {
         assert(Array.isArray(set.songs) && set.songs.length > 0 && set.songs.every(song => typeof song === 'string' && song.length > 0 && song === song.trim()), 'Listado de canciones inválido.');
-        assert(set.cardSize === musicSize(set.songs.length), 'Tamaño de cartón musical inválido.');
+        assert(['list', 'grid-3x9'].includes(set.cardLayout), 'Formato musical inválido.');
+        if (set.cardLayout === 'list') assert(set.cardSize === musicSize(set.songs.length), 'Tamaño de cartón musical inválido.');
+        else validateMusicSize(set.songs.length, set.cardSize);
         assert(Array.isArray(set.clips) && set.clips.length === set.songs.length, 'Fragmentos musicales incompletos.');
         for (let i = 0; i < set.clips.length; i++) validateClip(set.clips[i]);
         assert(Array.isArray(set.audioRefs) && set.audioRefs.length === set.songs.length, 'Referencias musicales incompletas.');
         for (let i = 0; i < set.audioRefs.length; i++) assert(audioReference(set.audioRefs[i]) === set.audioRefs[i], 'Referencia musical inválida.');
-      } else assert(set.songs === undefined && set.cardSize === undefined && set.clips === undefined && set.audioRefs === undefined, 'Un set clásico no debe contener un listado musical.');
+      } else assert(set.cardLayout === undefined && set.songs === undefined && set.cardSize === undefined && set.clips === undefined && set.audioRefs === undefined, 'Un set clásico no debe contener un listado musical.');
       assert(Array.isArray(set.cards) && set.cards.length >= 1 && set.cards.length <= 1000, 'Cantidad de cartones inválida.');
       const prints = new Set();
       set.cards.forEach(card => {
         assert(card && Number.isSafeInteger(card.code) && card.code > 0 && !codes.has(card.code), 'Código de cartón inválido o repetido.');
         let key;
         if (set.mode === 'music') {
-          assert(card.matrix === undefined && Array.isArray(card.numbers) && card.numbers.length === set.cardSize && card.numbers.every((n, i) => Number.isInteger(n) && n >= 1 && n <= set.songs.length && (i === 0 || n > card.numbers[i - 1])), 'Índices de cartón musical inválidos.');
+          assert(card.matrix === undefined && Array.isArray(card.numbers) && card.numbers.length === set.cardSize && Array.from(card.numbers).every((n, i) => Number.isInteger(n) && n >= 1 && n <= set.songs.length && (i === 0 || n > card.numbers[i - 1])), 'Índices de cartón musical inválidos.');
+          if (set.cardLayout === 'grid-3x9') validateMusicMatrix(card.musicMatrix, card.numbers, set.songs.length);
+          else assert(card.musicMatrix === undefined, 'Un cartón de lista no admite grilla.');
           key = card.numbers.join(',');
         } else {
-          assert(card.numbers === undefined, 'Cartón clásico inválido.');
+          assert(card.numbers === undefined && card.musicMatrix === undefined, 'Cartón clásico inválido.');
           validateCard(card.matrix); key = fingerprint(card.matrix);
         }
         assert(!prints.has(key), 'Hay cartones duplicados dentro de un set.');
@@ -283,7 +336,7 @@ function BingoFactory() {
     }
     throw new Error('No se encontró un cartón con ese código.');
   }
-  return { audioReference, referenceKey, folderSongs, moveFolderSong, folderSelection, validateClip, parseTime, formatTime, randomIndex, generateCard, generateCards, validateCard, fingerprint, draw, verify, emptyState, validateState, findCard, musicSize, musicLimit, combinations, randomBigInt, generateMusicCards, totalFor, verifyMusic };
+  return { validateMusicSize, validateMusicMatrix, generateMusicMatrix, audioReference, referenceKey, folderSongs, moveFolderSong, folderSelection, validateClip, parseTime, formatTime, randomIndex, generateCard, generateCards, validateCard, fingerprint, draw, verify, emptyState, validateState, findCard, musicSize, musicLimit, combinations, randomBigInt, generateMusicCards, totalFor, verifyMusic };
 }
 const Bingo = BingoFactory();
 if (typeof module !== 'undefined') module.exports = Bingo;

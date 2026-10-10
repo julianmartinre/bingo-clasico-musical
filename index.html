@@ -48,6 +48,8 @@
 <details id="folder-ignored" hidden><summary>Archivos ignorados</summary><ul id="folder-ignored-list"></ul></details>
 <p id="folder-announcement" class="reference-status" role="status"></p>
 <div id="folder-review" class="folder-review"></div>
+<label for="music-card-size">Canciones por cartón</label><input id="music-card-size" type="number" min="1" max="15" step="1" aria-describedby="music-size-help music-size-error" disabled>
+<small id="music-size-help">Incluí canciones para elegir el tamaño.</small><p id="music-size-error" role="status" hidden></p><p id="music-size-notice" role="status"></p>
 </div><label for="set-name">Nombre del set</label><input id="set-name" maxlength="60" placeholder="Ej. Bingo del sábado" required><label for="quantity">Cantidad de cartones</label><input id="quantity" type="number" min="1" max="1000" step="1" value="60" required><small id="quantity-help">Entre 1 y 1000 · 15 números por cartón</small><button id="generate" class="button primary" type="submit">Generar cartones <span>＋</span></button></form><div class="paper-note"><b>Listos para imprimir</b><p id="print-help">6 cartones por hoja A4, con su código y guías de corte.</p></div></section><section class="saved-sets"><div class="panel-heading"><h2>Mis sets</h2><span id="cards-total">0 cartones</span></div><div id="sets-list"></div></section></div>
       </section>
     </main>

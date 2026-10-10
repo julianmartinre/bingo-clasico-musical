@@ -52,7 +52,7 @@ async function restore(page, value, cancel = false) {
   await rawState(page, legacy); await page.reload(); await ready(page);
   assert.deepEqual(await rawState(page), legacy); assert.deepEqual(await state(page), B.validateState(legacy));
   await page.locator('#draw').click(); await page.waitForFunction(() => document.getElementById('draw-count').textContent === '3');
-  assert.equal((await rawState(page)).version, 4); assert.equal(await page.locator('.number-cell').count(), 90);
+  assert.equal((await rawState(page)).version, 5); assert.equal(await page.locator('.number-cell').count(), 90);
   await page.locator('[data-view="sets"]').click(); await page.locator('#set-mode').selectOption('music');
   await uploadSongs(page, ['Pasos al costado','Don','Don','<img src=x>']);
   assert.equal(await page.locator('.folder-song').count(),4);assert.equal(await page.locator('#folder-review img').count(),0);
@@ -98,7 +98,7 @@ async function restore(page, value, cancel = false) {
     await generate(page, `Impresión ${n}`, list, 2);
     const printSet = (await state(page)).sets.at(-1);
     await page.locator('.set-row').filter({ has: page.getByRole('heading', { name: `Impresión ${n}`, exact: true }) }).getByRole('button', { name: 'Ver / Imprimir' }).click();
-    const printed = await page.locator('#print-root .music-ticket').evaluateAll(nodes => nodes.map(node => ({ code: Number(node.dataset.code), songs: [...node.querySelectorAll('.music-entry')].map(row => [Number(row.dataset.number), row.querySelector('.music-title').textContent]) })));
+    const printed = await page.locator('#print-root .music-ticket').evaluateAll(nodes => nodes.map(node => ({ code: Number(node.dataset.code), songs: [...node.querySelectorAll('.music-grid-cell[data-number]')].map(row => [Number(row.dataset.number), row.title.slice(row.title.indexOf('. ') + 2)]) })));
     for (const card of printSet.cards) assert.deepEqual(printed.filter(part => part.code === card.code).flatMap(part => part.songs), card.numbers.map(number => [number, list[number - 1]]));
     assert(await page.locator('#print-root .music-page').evaluateAll(pages => pages.every(page => page.scrollHeight <= page.clientHeight + 1)));
     await page.locator('[data-close="preview-dialog"]').click();
@@ -108,14 +108,15 @@ async function restore(page, value, cancel = false) {
   await generate(page, 'Títulos extensos', longSongs, 1);
   const longSet = (await state(page)).sets.at(-1);
   await page.locator('.set-row').first().getByRole('button', { name: 'Ver / Imprimir' }).click();
-  const textByNumber = await page.locator('#print-root .music-entry').evaluateAll(rows => {
-    const result = {}; for (const row of rows) result[row.dataset.number] = (result[row.dataset.number] || '') + row.querySelector('.music-title').textContent; return result;
+  const textByNumber = await page.locator('#print-root .music-grid-cell[data-number]').evaluateAll(rows => {
+    const result = {}; for (const row of rows) result[row.dataset.number] = (result[row.dataset.number] || '') + row.title.slice(row.title.indexOf('. ') + 2); return result;
   });
   for (const number of longSet.cards[0].numbers) assert.equal(textByNumber[number], longSongs[number - 1].trim());
-  assert(await page.locator('#print-root .music-page').count() > 1);
+  assert.equal(await page.locator('#print-root .music-page').count(), 1);
+  assert.equal(await page.locator('#print-root .music-entries').count(), 0);
   assert(await page.locator('#print-root .music-page').evaluateAll(pages => pages.every(page => page.scrollHeight <= page.clientHeight + 1)));
   await page.locator('[data-close="preview-dialog"]').click();
-  await page.pdf({ path: path.join(out, 'continuaciones.pdf'), preferCSSPageSize: true, printBackground: true });
+  await page.pdf({ path: path.join(out, 'titulos-largos-grilla.pdf'), preferCSSPageSize: true, printBackground: true });
   // Restauración mixta en perfil vacío, cancelación, índices inválidos.
   const mixed = await state(page), fresh = await browser.newContext({ hasTouch: true }), recovered = await fresh.newPage(); await recovered.goto(url); await ready(recovered);
   await restore(recovered, mixed); assert.deepEqual(await state(recovered), mixed);

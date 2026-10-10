@@ -23,7 +23,7 @@ test('coincidencias, homónimos, ambigüedad nueva y prioridad manual', () => {
 });
 test('estado 3→4 puro, referencias válidas y respaldo atómico por validación', () => {
   const old = { version:3,nextCode:2,selectedGame:'g',sets:[{id:'s',mode:'music',name:'S',createdAt:'today',songs:['Don'],clips:[{start:2,end:4}],cardSize:1,cards:[{code:1,numbers:[1]}]}],games:[{id:'g',setId:'s',name:'G',createdAt:'today',drawn:[1]}] };
-  const copy=structuredClone(old), next=B.validateState(old); assert.deepEqual(old,copy); assert.equal(next.version,4); assert.deepEqual(next.sets[0].audioRefs,[null]);
+  const copy=structuredClone(old), next=B.validateState(old); assert.deepEqual(old,copy); assert.equal(next.version,5); assert.deepEqual(next.sets[0].audioRefs,[null]);
   assert.deepEqual(next.games,old.games); assert.deepEqual(next.sets[0].clips,old.sets[0].clips);
   next.sets[0].audioRefs[0]='C:/Don.mp3'; assert.deepEqual(B.validateState(JSON.parse(JSON.stringify(next))),next);
   for(const refs of [[], [undefined], new Array(1), ['http://x'], [''], [4]]) { const bad=structuredClone(next);bad.sets[0].audioRefs=refs;assert.throws(()=>B.validateState(bad)); }

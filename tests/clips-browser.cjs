@@ -19,7 +19,7 @@ let browser,server;
  p.on('pageerror',e=>errors.push(e.message));p.on('request',r=>{if(!['GET','HEAD'].includes(r.method())||(!r.url().startsWith('http://127.0.0.1:8080')&&!r.url().startsWith('blob:')&&!r.url().startsWith('data:')))requests.push(r.url());});
  await p.goto('http://127.0.0.1:8080');await ready(p);await seed(p);
  // Guardar sin archivo y sin crear partida.
- await fill(p,1,'00:02','00:04');await action(p,1,'save');await p.waitForFunction(()=>document.getElementById('clip-saved-1').textContent.includes('00:02 → 00:04'));assert.equal((await state(p)).version,4);assert.equal((await state(p)).games.length,0);
+ await fill(p,1,'00:02','00:04');await action(p,1,'save');await p.waitForFunction(()=>document.getElementById('clip-saved-1').textContent.includes('00:02 → 00:04'));assert.equal((await state(p)).version,5);assert.equal((await state(p)).games.length,0);
  await upload(p);assert(await p.locator('#clip-saved-1').textContent().then(t=>t.includes('Pendiente')));
  // Borradores independientes sobreviven a guardado y cargas adicionales.
  await fill(p,2,'00:01','00:05');await action(p,1,'save');await p.waitForFunction(()=>document.getElementById('clip-saved-1').textContent.includes('Duración'));assert.equal(await p.locator('#clip-start-2').inputValue(),'00:01');

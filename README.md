@@ -52,21 +52,21 @@ En **Mis cartones → Restaurar**, seleccioná un respaldo JSON y revisá la can
 
 ## Bingo musical
 
-En **Mis cartones**, elegí **Musical · tus canciones**, cargá una carpeta de audios y revisá títulos, inclusión y orden. La lista se forma automáticamente desde los nombres de archivo. Los números quedan fijos al generar. Con 30 canciones incluidas, cada cartón tiene 5; el tamaño sigue la regla `max(1, floor(N / 6))` y solo se permite la cantidad de cartones únicos disponible.
+En **Mis cartones**, elegí **Musical · tus canciones**, cargá una carpeta de audios y revisá títulos, inclusión y orden. La lista se forma automáticamente desde los nombres de archivo. Los números quedan fijos al generar. Elegí **Canciones por cartón** entre 1 y el menor entre 15 y las canciones incluidas. El valor inicial es ese máximo. Con 30 canciones podés elegir, por ejemplo, 12 por cartón. Con 8 canciones y tamaño 8 solo existe un cartón único. La cantidad de cartones se limita a `min(1000, C(N,K))`; cambiar el tamaño o excluir canciones puede reducir ese máximo y se muestra un aviso.
 
-Las casillas muestran **número y nombre**; el **código de cartón** sirve para verificar el reclamo. Ambos números cumplen funciones distintas. Elegir otra carpeta no cambia los sets ya guardados.
+Los cartones nuevos tienen **3 filas × 9 columnas**, hasta cinco números por fila y casillas vacías. Cada casilla muestra número y nombre (por ejemplo, «1. Fantasmas»), en orden por filas. Los títulos que exceden cuatro líneas se abrevian visualmente dentro de la casilla; el nombre completo se puede consultar pasando el mouse sobre la casilla. No se repite la lista debajo de la grilla. En pantallas pequeñas la grilla se desplaza horizontalmente. La distribución se guarda para que recargar, restaurar o reimprimir no cambie los vacíos; el **código de cartón** sirve para verificar el reclamo. Ambos números cumplen funciones distintas. Elegir otra carpeta no cambia los sets ya guardados.
 
 Creá una partida con el set musical. Su bolillero tendrá tantas bolillas como canciones. Al sacar una, aparece su número y nombre. Pasá el mouse, enfocá con Tab o tocá un número del tablero o historial para consultar la canción sin alterar el sorteo. Escape cierra la consulta.
 
 En musical se gana **solo con el cartón completo**. El verificador muestra canciones acertadas y faltantes, sin premio por línea. El clásico mantiene sus reglas anteriores. El audio local es opcional y se configura por set.
 
-La impresión musical usa A4 con distribución adaptada a los nombres completos. Los cartones largos pueden continuar en otra hoja: cada parte repite el código del cartón. Seleccioná A4, 100 % y desactivá encabezados/pies del navegador. La vista previa contiene las mismas páginas que se imprimen. El clásico sigue imprimiendo seis cartones por hoja.
+La impresión musical usa A4 con distribución adaptada a los nombres completos. La grilla se mantiene entera y se acomodan varios cartones por hoja. Las listas históricas conservan sus continuaciones cuando son necesarias. Seleccioná A4, 100 % y desactivá encabezados/pies del navegador. La vista previa contiene las mismas páginas que se imprimen. El clásico sigue imprimiendo seis cartones por hoja.
 
 ### Datos anteriores y respaldos
 
-La aplicación acepta respaldos versión 1, 2 y 3 y los adapta en memoria a versión 4; conserva cartones, códigos, bolillas, historial y fragmentos, agregando referencias vacías y canción completa donde no había fragmentos. El cambio se guarda con la siguiente operación autorizada. Los respaldos nuevos son versión 4 y pueden contener ambos modos, tiempos y referencias de audio. Restaurarlos reemplaza los datos solo después de confirmar; archivos inválidos o cancelar no cambian nada.
+La aplicación acepta respaldos versión 1–4 y los adapta en memoria a versión 5; conserva cartones, códigos, bolillas, historial y fragmentos, agregando referencias vacías y canción completa donde no había fragmentos. El cambio se guarda con la siguiente operación autorizada. Los respaldos nuevos son versión 5 y pueden contener ambos modos, tiempos y referencias de audio. Restaurarlos reemplaza los datos solo después de confirmar; archivos inválidos o cancelar no cambian nada.
 
-Antes de actualizar, conservá un respaldo de la versión anterior si necesitás volver a ese código. Las versiones anteriores del programa no pueden leer respaldos versión 4. Cambiar entre archivo local y HTTP también requiere exportar/restaurar porque son orígenes distintos.
+Antes de actualizar, conservá un respaldo de la versión anterior si necesitás volver a ese código. Las versiones anteriores del programa no pueden leer respaldos versión 5. Cambiar entre archivo local y HTTP también requiere exportar/restaurar porque son orígenes distintos.
 
 ## Pruebas
 
@@ -131,4 +131,4 @@ Elegir otra carpeta válida reemplaza la revisión; cancelar o elegir una sin au
 
 Las referencias relativas se guardan en el set y se incluyen en el respaldo versión 4. Los audios permanecen temporales en tu dispositivo: tras recargar elegí nuevamente la carpeta desde **♫ Audios**, incluso si personalizaste títulos. Allí también podés reemplazar un archivo individual y configurar fragmentos. No se envían audios ni se guardan en el respaldo.
 
-Los sets históricos creados con TXT/CSV siguen funcionando. Se admiten respaldos de versiones 1–4 sin cambiar códigos, títulos, orden, historial ni fragmentos. Ya no se importan listados TXT/CSV para crear sets nuevos. No se requiere nueva migración respecto del estado versión 4.
+Los sets históricos creados con TXT/CSV siguen funcionando. Se admiten respaldos de versiones 1–5 sin cambiar códigos, títulos, orden, historial ni fragmentos. Ya no se importan listados TXT/CSV para crear sets nuevos. Los sets musicales anteriores conservan su presentación de lista y tamaño histórico, incluso si superan 15 canciones por cartón. El estado versión 5 distingue listas y grillas; no cambia la versión física de IndexedDB. Para volver al código anterior usá un respaldo previo compatible, sin degradar el estado 5.

@@ -223,15 +223,16 @@
   }
   function controls() {
     const disabled = !writable || busy;
-    ['new-game', 'generate', 'import', 'game-select', 'game-set', 'confirm-import', 'set-mode', 'songs-folder'].forEach(id => $(id).disabled = disabled);
+    ['set-name', 'quantity', 'new-game', 'generate', 'import', 'game-select', 'game-set', 'confirm-import', 'set-mode', 'songs-folder'].forEach(id => $(id).disabled = disabled);
     document.querySelectorAll('#folder-review input, #folder-review button, #audio-links input, #audio-links select, .reference-editor button, #audio-files, #audio-folder').forEach(node => node.disabled = disabled);
     $('songs-folder').disabled = disabled || !folderSupported;
+    $('music-card-size').disabled = disabled || !draftSongs.length || $('set-mode').value !== 'music';
     folderRows.forEach((row, i) => {
       const group = document.querySelector(`[data-row-id="${row.id}"]`); if (!group) return;
       group.querySelector('[data-move="-1"]').disabled = disabled || i === 0;
       group.querySelector('[data-move="1"]').disabled = disabled || i === folderRows.length - 1;
     });
-    $('generate').disabled = disabled || ($('set-mode').value === 'music' && (!draftSongs.length || draftSongs.some(song => !song)));
+    $('generate').disabled = disabled || ($('set-mode').value === 'music' && (!draftSongs.length || draftSongs.some(song => !song) || !validDraftSize()));
     $('new-game').disabled = disabled || !state.sets.length;
     $('draw').disabled = disabled || !game() || game().drawn.length >= Bingo.totalFor(setFor(game())) || Boolean(snapshot);
     $('verify-open').disabled = !writable || busy || !game();
@@ -291,7 +292,7 @@
     if (!state.sets.length) $('sets-list').append(element('div', 'empty-sets', 'Tu primer set empieza acá.\nDale un nombre, elegí la cantidad y prepará los cartones.'));
     [...state.sets].reverse().forEach(set => {
       const row = element('article', 'set-row'), info = element('div', 'set-info');
-      info.append(element('h3', '', set.name), element('p', '', `${modeName(set)} · ${set.cards.length} cartones · Códigos ${set.cards[0].code}–${set.cards.at(-1).code}${set.mode === 'music' ? ` · ${set.songs.length} canciones, ${set.cardSize} por cartón` : ''}`));
+      info.append(element('h3', '', set.name), element('p', '', `${modeName(set)} · ${set.cards.length} cartones · Códigos ${set.cards[0].code}–${set.cards.at(-1).code}${set.mode === 'music' ? ` · ${set.songs.length} canciones, ${set.cardSize} por cartón · ${set.cardLayout === 'grid-3x9' ? 'Grilla 3 × 9' : 'Lista anterior'}` : ''}`));
       const preview = element('button', 'button secondary', 'Ver / Imprimir'); preview.onclick = () => openPreview(set.id);
       const play = element('button', 'text-button', 'Jugar →'); play.disabled = !writable; play.onclick = () => openGame(set.id);
       row.append(element('span', 'set-icon', '▦'), info, preview, play);
@@ -360,9 +361,9 @@
     } catch (error) { writable = false; notice(error.message, true); }
     finally { lockPending = false; controls(); }
   }
-  function generateInWorker(count, total = null) {
+  function generateInWorker(count, total = null, size = null) {
     return new Promise((resolve, reject) => {
-      const source = `const Bingo = (${BingoFactory.toString()})(); onmessage = event => { try { const {count,total} = event.data; postMessage({cards: total === null ? Bingo.generateCards(count) : Bingo.generateMusicCards(total,count)}); } catch(error) { postMessage({error:error.message}); } };`;
+      const source = `const Bingo = (${BingoFactory.toString()})(); onmessage = event => { try { const {count,total,size} = event.data; postMessage({cards: total === null ? Bingo.generateCards(count) : Bingo.generateMusicCards(total,count,size).map(numbers => ({numbers, musicMatrix: Bingo.generateMusicMatrix(numbers,total)}))}); } catch(error) { postMessage({error:error.message}); } };`;
       const url = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
       let worker;
       const cleanup = () => { worker?.terminate(); URL.revokeObjectURL(url); };
@@ -370,7 +371,7 @@
         worker = new Worker(url);
         worker.onmessage = e => { cleanup(); e.data.error ? reject(new Error(e.data.error)) : resolve(e.data.cards); };
         worker.onerror = () => { cleanup(); reject(new Error('No se pudo generar el set. Probá abrir la aplicación desde el servidor local.')); };
-        worker.postMessage({ count, total });
+        worker.postMessage({ count, total, size });
       } catch (error) { cleanup(); reject(error); }
     });
   }
@@ -411,17 +412,33 @@
   $('audio-volume').oninput = () => { if (writable) audioPlayer.volume(Number($('audio-volume').value) / 100); };
   $('go-sets').onclick = () => { showView('sets'); $('set-name').focus(); };
   $('new-game').onclick = () => openGame(); $('take-control').onclick = acquireLock;
+  function validDraftSize() {
+    const size = Number($('music-card-size').value);
+    return Number.isInteger(size) && size >= 1 && size <= Math.min(15, draftSongs.length);
+  }
   function updateDraft() {
+    const previousTotal = draftSongs.length;
     const musical = $('set-mode').value === 'music', included = folderRows.filter(row => row.included);
     draftSongs = included.map(row => row.title.trim()); const total = draftSongs.length;
     $('music-upload').hidden = !musical; $('folder-support').hidden = folderSupported;
     document.querySelector('.sets-layout').classList.toggle('musical-preparation', musical);
-    const max = musical && total ? Bingo.musicLimit(total) : 1000;
+    const sizeField = $('music-card-size'), maxSize = Math.min(15, total);
+    sizeField.max = maxSize || 1;
+    if (total !== previousTotal && total && (Number(sizeField.value) > maxSize || !previousTotal)) {
+      sizeField.value = maxSize;
+      $('music-size-notice').textContent = `Tamaño ajustado a ${maxSize} canciones por cartón según el listado incluido.`;
+    }
+    const size = Number(sizeField.value), validSize = validDraftSize();
+    sizeField.setAttribute('aria-invalid', String(Boolean(total) && !validSize));
+    $('music-size-error').hidden = !total || validSize;
+    $('music-size-error').textContent = `Ingresá un entero entre 1 y ${maxSize}.`;
+    $('music-size-help').textContent = total ? `Entre 1 y ${maxSize} · Grilla de 3 × 9 con espacios vacíos · Solo bingo completo` : 'Incluí canciones para elegir el tamaño.';
+    const max = musical ? validSize ? Bingo.musicLimit(total, size) : 0 : 1000;
     $('quantity').max = max;
-    if (Number($('quantity').value) > max) $('quantity').value = max;
-    $('quantity-help').textContent = musical ? total ? `Entre 1 y ${max} cartones · ${Bingo.musicSize(total)} canciones por cartón` : 'Primero incluí canciones de una carpeta.' : 'Entre 1 y 1000 · 15 números por cartón';
-    $('print-help').textContent = musical ? 'Número y nombre de cada canción. Hojas A4 adaptadas al contenido.' : '6 cartones por hoja A4, con su código y guías de corte.';
-    $('songs-summary').textContent = folderRows.length ? `${folderName} · ${total} canciones incluidas · ${folderRows.length - total} excluidas · ${folderIgnored.length} archivos ignorados${total ? ` · ${Bingo.musicSize(total)} por cartón` : ''}` : 'Elegí una carpeta con tus canciones.';
+    if (max && Number($('quantity').value) > max) { $('quantity').value = max; $('music-size-notice').textContent += ` Cantidad ajustada: máximo ${max} cartones únicos.`; }
+    $('quantity-help').textContent = musical ? validSize ? `Entre 1 y ${max} cartones únicos · ${size} canciones por cartón` : 'Primero incluí canciones de una carpeta.' : 'Entre 1 y 1000 · 15 números por cartón';
+    $('print-help').textContent = musical ? 'Grilla con número y canción en cada casilla. Varios cartones por hoja A4.' : '6 cartones por hoja A4, con su código y guías de corte.';
+    $('songs-summary').textContent = folderRows.length ? `${folderName} · ${total} canciones incluidas · ${folderRows.length - total} excluidas · ${folderIgnored.length} archivos ignorados` : 'Elegí una carpeta con tus canciones.';
     const duplicates = draftSongs.filter((song, i) => song && draftSongs.indexOf(song) !== i);
     $('songs-warning').hidden = !duplicates.length && !draftSongs.some(song => !song);
     $('songs-warning').textContent = draftSongs.some(song => !song) ? 'Completá los títulos vacíos de las canciones incluidas.' : duplicates.length ? 'Hay títulos repetidos. Se conservarán como canciones independientes.' : '';
@@ -434,9 +451,11 @@
     controls();
   }
   function clearDraft() {
+    $('music-card-size').value = ''; $('music-size-notice').textContent = '';
     loadToken++; folderRows = []; folderIgnored = []; folderName = ''; draftSongs = [];
     $('songs-folder').value = ''; $('folder-review').replaceChildren(); $('folder-ignored').hidden = true; $('folder-ignored-list').replaceChildren(); $('folder-announcement').textContent = '';
   }
+  $('music-card-size').oninput = () => { $('music-size-notice').textContent = ''; updateDraft(); };
   $('set-mode').onchange = () => { if (!writable || busy) return; clearDraft(); updateDraft(); };
   $('songs-folder').onchange = () => {
     if (!writable || busy || !folderSupported || !$('songs-folder').files.length) return;
@@ -445,6 +464,7 @@
       const result = Bingo.folderSongs(files);
       if (token !== loadToken) return;
       if (!result.rows.length) throw new Error(`La carpeta no contiene audios válidos. ${result.ignored.length} archivos ignorados: ${[...new Set(result.ignored.map(item => item.reason))].join("; ")}. Se conserva la revisión anterior.`);
+      $('music-card-size').value = Math.min(15, result.rows.length); $('music-size-notice').textContent = '';
       folderRows = result.rows; folderIgnored = result.ignored; folderName = folderRows[0].relativePath.split('/')[0];
       $('folder-ignored-list').replaceChildren(...folderIgnored.map(item => element('li', '', `${item.name}: ${item.reason}`)));
       $('folder-ignored').hidden = !folderIgnored.length; $('folder-announcement').textContent = 'Carpeta cargada. Revisá los títulos y el orden antes de generar.';
@@ -456,22 +476,22 @@
   $('generate-form').onsubmit = async event => {
     event.preventDefault(); if (!writable || busy) return;
     const name = $('set-name').value.trim(), count = Number($('quantity').value);
-    const mode = $('set-mode').value;
+    const mode = $('set-mode').value, size = Number($('music-card-size').value);
     let selected = [];
     try { if (mode === 'music') selected = Bingo.folderSelection(folderRows); } catch (error) { return notice(error.message, true); }
     const songs = selected.map(row => row.title), audioRefs = selected.map(row => row.relativePath);
     let createdId;
     if (!name) return notice('Ingresá un nombre para el set.', true);
     if (!Number.isInteger(count) || count < 1 || count > 1000) return notice('Elegí entre 1 y 1000 cartones.', true);
-    if (mode === 'music' && (!songs.length || count > Bingo.musicLimit(songs.length))) return notice('Revisá el listado y la cantidad máxima de cartones.', true);
+    if (mode === 'music' && (!validDraftSize() || count > Bingo.musicLimit(songs.length, size))) return notice('Revisá el listado y la cantidad máxima de cartones.', true);
     busy = true; controls();
     try {
-      const generated = await generateInWorker(count, mode === 'music' ? songs.length : null);
+      const generated = await generateInWorker(count, mode === 'music' ? songs.length : null, size);
       state = await BingoStorage.update(current => {
         if (current.nextCode + count >= Number.MAX_SAFE_INTEGER) throw new Error('Se alcanzó el límite de códigos.');
-        const set = { id: crypto.randomUUID(), name, mode, createdAt: new Date().toISOString(), cards: generated.map(values => ({ code: current.nextCode++, ...(mode === 'music' ? { numbers: values } : { matrix: values }) })) };
+        const set = { id: crypto.randomUUID(), name, mode, createdAt: new Date().toISOString(), cards: generated.map(values => ({ code: current.nextCode++, ...(mode === 'music' ? values : { matrix: values }) })) };
         createdId = set.id;
-        if (mode === 'music') { set.songs = songs; set.audioRefs = audioRefs; set.clips = songs.map(() => ({ start: 0, end: null })); set.cardSize = Bingo.musicSize(songs.length); }
+        if (mode === 'music') { set.songs = songs; set.audioRefs = audioRefs; set.clips = songs.map(() => ({ start: 0, end: null })); set.cardSize = size; set.cardLayout = 'grid-3x9'; }
         current.sets.push(set); return current;
       });
       if (mode === 'music') { const target = state.sets.find(set => set.id === createdId); audioLibrary.add(target, selected.map(row => row.file)); const files = audioLibrary.files(target); selected.forEach((row, i) => audioLibrary.assign(target, i + 1, files.indexOf(row.file))); }

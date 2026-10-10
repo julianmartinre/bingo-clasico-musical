@@ -43,7 +43,7 @@ test('línea, aciertos repartidos, 14 aciertos, bingo y casillas vacías', () =>
 test('respaldo válido se copia y se conserva sin cambios', () => {
   const state = fixture(); state.games[0].drawn = [2, 11, 50, 60, 70];
   const restored = B.validateState(JSON.parse(JSON.stringify(state)));
-  assert.deepEqual(restored, { ...state, version: 4, sets: state.sets.map(set => ({ ...set, mode: 'classic' })) }); assert.notEqual(restored, state);
+  assert.deepEqual(restored, { ...state, version: 5, sets: state.sets.map(set => ({ ...set, mode: 'classic' })) }); assert.notEqual(restored, state);
   assert.deepEqual(B.verify(restored.sets[0].cards[0].matrix, restored.games[0].drawn).lines, [2]);
 });
 test('rechaza versiones, códigos, matrices, partidas y bolillas inválidas', () => {

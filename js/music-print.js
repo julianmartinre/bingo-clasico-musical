@@ -7,11 +7,26 @@ const BingoMusicPrint = (() => {
     if (text !== undefined) node.textContent = text;
     return node;
   }
-  function shell(card, set) {
+  function shell(card, set, drawn = [], withGrid = true) {
     const node = el('article', 'music-ticket'); node.dataset.code = card.code;
     const header = el('header', 'music-ticket-heading');
     header.append(el('span', '', `BINGO MUSICAL · ${set.name}`), el('strong', '', `Cartón N.º ${card.code}`));
     node.append(header, el('div', 'music-part', 'Bingo completo'), el('div', 'music-entries'));
+    if (withGrid && set.cardLayout === 'grid-3x9') {
+      const grid = el('div', 'music-grid'); grid.setAttribute('aria-label', 'Cartón de 3 filas y 9 columnas');
+      for (const values of card.musicMatrix) for (const n of values) {
+        const cell = el('div', `music-grid-cell${n === null ? ' blank' : drawn.includes(n) ? ' matched' : ''}`);
+        if (n !== null) {
+          const label = `${n}. ${set.songs[n - 1]}`;
+          cell.dataset.number = n; cell.title = label;
+          cell.append(el('span', 'music-cell-label', label));
+        }
+        else cell.setAttribute('aria-label', 'Casilla vacía');
+        grid.append(cell);
+      }
+      const scroll = el('div', 'music-grid-scroll'); scroll.append(grid);
+      node.insertBefore(scroll, node.lastChild);
+    }
     return node;
   }
   function row(n, title, matched = false, continuation = false) {
@@ -20,8 +35,9 @@ const BingoMusicPrint = (() => {
     return node;
   }
   function ticket(card, set, drawn = []) {
-    const node = shell(card, set);
-    card.numbers.forEach(n => node.lastChild.append(row(n, set.songs[n - 1], drawn.includes(n))));
+    const node = shell(card, set, drawn);
+    if (set.cardLayout === 'grid-3x9') node.querySelector('.music-entries').remove();
+    else card.numbers.forEach(n => node.lastChild.append(row(n, set.songs[n - 1], drawn.includes(n))));
     return node;
   }
   function pages(set) {
@@ -45,7 +61,7 @@ const BingoMusicPrint = (() => {
         complete.remove();
         const parts = [];
         let part = shell(card, set); page.append(part); parts.push(part);
-        const nextPart = () => { newPage(); part = shell(card, set); page.append(part); parts.push(part); };
+        const nextPart = () => { newPage(); part = shell(card, set, [], false); page.append(part); parts.push(part); };
         for (const n of card.numbers) {
           let text = set.songs[n - 1], continued = false;
           while (text.length) {

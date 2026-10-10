@@ -302,3 +302,13 @@ select option{background:var(--white);color:var(--ink)}
 .folder-song .reference-status { margin: .5rem 0; }
 .sets-layout.musical-preparation { grid-template-columns: minmax(360px, 1fr) minmax(0, 1fr); }
 @media(max-width: 800px) { .sets-layout.musical-preparation { grid-template-columns: 1fr; } }
+
+/* Musical: distribución persistida, independiente de las decenas del clásico. */
+.music-grid-scroll{max-width:100%;overflow-x:auto}
+.music-grid{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));min-width:648px;border-top:1px solid #72816a;border-left:1px solid #72816a;margin:8px 0;break-inside:avoid}
+.music-grid-cell{height:76px;display:flex;align-items:center;justify-content:center;padding:5px;min-width:0;font-size:12px;line-height:1.3;text-align:center;font-variant-numeric:tabular-nums;border-right:1px solid #72816a;border-bottom:1px solid #72816a;color:#203b34;background:#fff}
+.music-cell-label{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:4;overflow:hidden;overflow-wrap:anywhere;max-width:100%}
+.music-grid-cell.blank{background:repeating-linear-gradient(135deg,#edf0e7,#edf0e7 3px,#f6f7f3 3px,#f6f7f3 6px)}
+.music-grid-cell.matched{background:#dce7b6;font-weight:700;text-decoration:underline}
+#music-size-error{color:var(--error-text)}
+@media print{.music-grid-scroll{overflow:visible}.music-grid{break-inside:avoid;min-width:0}.music-grid-cell{print-color-adjust:exact}}
